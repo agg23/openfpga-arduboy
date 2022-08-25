@@ -433,14 +433,48 @@ module core_top (
                   );
 
   // System ROM
-  // TODO: Replace this
-  (* ram_init_file = "core/rtl/CastleBoy.mif" *)
   reg  [1:0][7:0] rom[16384];
 
   wire [13:0] pgm_addr;
   reg  [15:0] pgm_data;
 
   always @ (posedge clk_avr_16) pgm_data <= rom[pgm_addr];
+
+  reg bridge_write_high = 0;
+  reg [31:0] cached_addr;
+  reg [15:0] cached_data;
+
+  // Data transfer
+  always @(posedge clk_74a)
+  begin
+    if((bridge_wr && bridge_addr[31:28] == 4'h0) || bridge_write_high)
+    begin
+      reg [14:0] addr_temp;
+      reg [13:0] addr;
+
+      // TODO: Can this be removed?
+      addr_temp = (bridge_write_high ? cached_addr : bridge_addr);
+      // Address (every 4 bytes) mod 2
+      addr = {addr_temp[14:2], 1'b0};
+
+      if(bridge_write_high)
+      begin
+        // High 2 bytes
+        cached_addr <= 0;
+        rom[addr + 1] <= cached_data;
+      end
+      else
+      begin
+        // Low 2 bytes
+        rom[addr] <= bridge_endian_little ? bridge_wr_data[15:0] : {bridge_wr_data[23:16], bridge_wr_data[31:24]};
+
+        cached_addr <= bridge_addr;
+        cached_data <= bridge_endian_little ? bridge_wr_data[31:16] : {bridge_wr_data[7:0], bridge_wr_data[15:8]};
+      end
+
+      bridge_write_high <= ~bridge_write_high;
+    end
+  end
 
   // Core
 
@@ -487,11 +521,11 @@ module core_top (
   wire vs_s, hs_s, vblank_s, hblank_s;
   wire pixel_value_s;
 
-  synch_3 s_vs(VSync, vs_s, clk_video_5_03);
-  synch_3 s_hs(HSync, hs_s, clk_video_5_03);
-  synch_3 s_vb(VBlank, vblank_s, clk_video_5_03);
-  synch_3 s_hb(HBlank, hblank_s, clk_video_5_03);
-  synch_3 s_pixel(pixelValue, pixel_value_s, clk_video_5_03);
+  synch_3 s_vs(VSync, vs_s, clk_video_5);
+  synch_3 s_hs(HSync, hs_s, clk_video_5);
+  synch_3 s_vb(VBlank, vblank_s, clk_video_5);
+  synch_3 s_hb(HBlank, hblank_s, clk_video_5);
+  synch_3 s_pixel(pixelValue, pixel_value_s, clk_video_5);
 
   vgaHdmi vgaHdmi
           (
@@ -518,8 +552,8 @@ module core_top (
   reg video_vs_reg;
   reg [23:0] video_rgb_reg;
 
-  assign video_rgb_clock = clk_video_5_03;
-  assign video_rgb_clock_90 = clk_video_5_03_90deg;
+  assign video_rgb_clock = clk_video_5;
+  assign video_rgb_clock_90 = clk_video_5_90deg;
   assign video_de = video_de_reg;
   assign video_skip = video_skip_reg;
   assign video_hs = video_hs_reg;
@@ -529,7 +563,7 @@ module core_top (
   reg hs_prev;
   reg vs_prev;
 
-  always @(posedge clk_video_5_03)
+  always @(posedge clk_video_5)
   begin
     reg de;
 
@@ -632,8 +666,8 @@ module core_top (
 
   wire clk_sys_40;
   wire clk_avr_16;
-  wire clk_video_5_03;
-  wire clk_video_5_03_90deg;
+  wire clk_video_5;
+  wire clk_video_5_90deg;
 
   wire    pll_core_locked;
 
@@ -643,8 +677,8 @@ module core_top (
 
                .outclk_0       ( clk_sys_40 ),
                .outclk_1       ( clk_avr_16 ),
-               .outclk_2       ( clk_video_5_03 ),
-               .outclk_3       ( clk_video_5_03_90deg ),
+               .outclk_2       ( clk_video_5 ),
+               .outclk_3       ( clk_video_5_90deg ),
 
                .locked         ( pll_core_locked )
              );

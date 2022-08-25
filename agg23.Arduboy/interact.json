@@ -1,43 +1,7 @@
 {
-    "interact": {
-        "magic": "APF_VER_1",
-        "variables": [
-            {
-                "name": "Pixel",
-                "id": 10,
-                "type": "number_u32",
-                "enabled": false,
-                "address": "0x00000000"
-            },
-            {
-                "name": "Addr",
-                "id": 11,
-                "type": "number_u32",
-                "enabled": false,
-                "address": "0x00000004"
-            },
-            {
-                "name": "Data",
-                "id": 12,
-                "type": "number_u32",
-                "enabled": false,
-                "address": "0x00000008"
-            },
-            {
-                "name": "VSync",
-                "id": 13,
-                "type": "number_u32",
-                "enabled": false,
-                "address": "0x0000000C"
-            },
-            {
-                "name": "HSync",
-                "id": 14,
-                "type": "number_u32",
-                "enabled": false,
-                "address": "0x00000010"
-            }
-        ],
-        "messages": []
-    }
+  "interact": {
+    "magic": "APF_VER_1",
+    "variables": [],
+    "messages": []
+  }
 }

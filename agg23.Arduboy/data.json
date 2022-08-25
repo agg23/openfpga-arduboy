@@ -1,6 +1,14 @@
 {
     "data": {
         "magic": "APF_VER_1",
-        "data_slots": []
+        "data_slots": [
+            {
+                "name": "ROM",
+                "required": true,
+                "parameters": 8,
+                "extensions": ["bin"],
+                "address": "0x00000000"
+            }
+        ]
     }
 }
