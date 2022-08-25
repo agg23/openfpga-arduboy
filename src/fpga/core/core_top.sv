@@ -440,41 +440,30 @@ module core_top (
 
   always @ (posedge clk_avr_16) pgm_data <= rom[pgm_addr];
 
-  reg bridge_write_high = 0;
-  reg [31:0] cached_addr;
-  reg [15:0] cached_data;
+  wire write_en;
+  wire [13:0] write_addr;
+  wire [15:0] write_data;
 
-  // Data transfer
+  data_loader_16 #(.ADDRESS_MASK_UPPER_4(4'h0)) data_loader_16 (
+                   .clk_74a(clk_74a),
+                   .bridge_wr(bridge_wr),
+                   .bridge_endian_little(bridge_endian_little),
+                   .bridge_addr(bridge_addr),
+                   .bridge_wr_data(bridge_wr_data),
+
+                   .write_en(write_en),
+                   .write_addr(write_addr),
+                   .write_data(write_data),
+                 );
+
   always @(posedge clk_74a)
   begin
-    if((bridge_wr && bridge_addr[31:28] == 4'h0) || bridge_write_high)
+    if(write_en)
     begin
-      reg [14:0] addr_temp;
-      reg [13:0] addr;
-
-      // TODO: Can this be removed?
-      addr_temp = (bridge_write_high ? cached_addr : bridge_addr);
-      // Address (every 4 bytes) mod 2
-      addr = {addr_temp[14:2], 1'b0};
-
-      if(bridge_write_high)
-      begin
-        // High 2 bytes
-        cached_addr <= 0;
-        rom[addr + 1] <= cached_data;
-      end
-      else
-      begin
-        // Low 2 bytes
-        rom[addr] <= bridge_endian_little ? bridge_wr_data[15:0] : {bridge_wr_data[23:16], bridge_wr_data[31:24]};
-
-        cached_addr <= bridge_addr;
-        cached_data <= bridge_endian_little ? bridge_wr_data[31:16] : {bridge_wr_data[7:0], bridge_wr_data[15:8]};
-      end
-
-      bridge_write_high <= ~bridge_write_high;
+      rom[write_addr] = write_data;
     end
   end
+
 
   // Core
 
