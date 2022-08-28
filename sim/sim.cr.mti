@@ -1,0 +1,64 @@
+C:/Users/adam/code/fpga/arduboy/sim/rom_loader_tb.vhd {0 {vcom -work work -2008 -explicit -stats=none C:/Users/adam/code/fpga/arduboy/sim/rom_loader_tb.vhd
+Model Technology ModelSim - Intel FPGA Edition vcom 10.5b Compiler 2016.10 Oct  5 2016
+-- Loading package STANDARD
+-- Loading package TEXTIO
+-- Loading package std_logic_1164
+-- Loading package NUMERIC_STD
+-- Loading package ENV
+-- Compiling entity rom_loader_tb
+-- Compiling architecture rtl of rom_loader_tb
+** Warning: C:/Users/adam/code/fpga/arduboy/sim/rom_loader_tb.vhd(59): (vcom-1236) Shared variables must be of a protected type.
+** Warning: C:/Users/adam/code/fpga/arduboy/sim/rom_loader_tb.vhd(60): (vcom-1236) Shared variables must be of a protected type.
+-- Loading package vl_types
+-- Loading entity rom
+-- Loading entity rom_loader
+** Error (suppressible): C:/Users/adam/code/fpga/arduboy/sim/rom_loader_tb.vhd(66): (vcom-1272) Length of formal "address_a" is 14; length of actual is 15.
+** Error (suppressible): C:/Users/adam/code/fpga/arduboy/sim/rom_loader_tb.vhd(72): (vcom-1272) Length of formal "data_a" is 16; length of actual is 8.
+** Error (suppressible): C:/Users/adam/code/fpga/arduboy/sim/rom_loader_tb.vhd(77): (vcom-1272) Length of formal "q_a" is 16; length of actual is 8.
+** Error: C:/Users/adam/code/fpga/arduboy/sim/rom_loader_tb.vhd(340): VHDL Compiler exiting
+
+} {18.0 19.0} {}} C:/Users/adam/code/fpga/arduboy/src/fpga/core/rtl/rom_loader.v {1 {vlog -work work -stats=none C:/Users/adam/code/fpga/arduboy/src/fpga/core/rtl/rom_loader.v
+Model Technology ModelSim - Intel FPGA Edition vlog 10.5b Compiler 2016.10 Oct  5 2016
+-- Compiling module rom_loader
+
+Top level modules:
+	rom_loader
+
+} {} {}} C:/Users/adam/code/fpga/arduboy/sim/inferred.sv {1 {vlog -work work -sv -stats=none C:/Users/adam/code/fpga/arduboy/sim/inferred.sv
+Model Technology ModelSim - Intel FPGA Edition vlog 10.5b Compiler 2016.10 Oct  5 2016
+-- Compiling module inferred_rom
+
+Top level modules:
+	inferred_rom
+
+} {} {}} C:/Users/adam/code/fpga/arduboy/src/fpga/core/rom.v {1 {vlog -work work -stats=none C:/Users/adam/code/fpga/arduboy/src/fpga/core/rom.v
+Model Technology ModelSim - Intel FPGA Edition vlog 10.5b Compiler 2016.10 Oct  5 2016
+-- Compiling module rom
+
+Top level modules:
+	rom
+
+} {} {}} C:/Users/adam/code/fpga/arduboy/sim/rom_tb.vhd {0 {vcom -work work -2008 -explicit -stats=none C:/Users/adam/code/fpga/arduboy/sim/rom_tb.vhd
+Model Technology ModelSim - Intel FPGA Edition vcom 10.5b Compiler 2016.10 Oct  5 2016
+-- Loading package STANDARD
+-- Loading package TEXTIO
+-- Loading package std_logic_1164
+-- Loading package NUMERIC_STD
+-- Loading package ENV
+-- Compiling entity rom_tb
+-- Compiling architecture rtl of rom_tb
+-- Loading package vl_types
+-- Loading entity rom
+** Error (suppressible): C:/Users/adam/code/fpga/arduboy/sim/rom_tb.vhd(34): (vcom-1272) Length of formal "address_a" is 14; length of actual is 15.
+** Error (suppressible): C:/Users/adam/code/fpga/arduboy/sim/rom_tb.vhd(40): (vcom-1272) Length of formal "data_a" is 16; length of actual is 8.
+** Error (suppressible): C:/Users/adam/code/fpga/arduboy/sim/rom_tb.vhd(45): (vcom-1272) Length of formal "q_a" is 16; length of actual is 8.
+** Error: C:/Users/adam/code/fpga/arduboy/sim/rom_tb.vhd(89): VHDL Compiler exiting
+
+} {15.0 16.0} {}} C:/Users/adam/code/fpga/arduboy/src/fpga/core/rtl/data_loader_8.v {1 {vlog -work work -sv -stats=none C:/Users/adam/code/fpga/arduboy/src/fpga/core/rtl/data_loader_8.v
+Model Technology ModelSim - Intel FPGA Edition vlog 10.5b Compiler 2016.10 Oct  5 2016
+-- Compiling module data_loader_8
+
+Top level modules:
+	data_loader_8
+
+} {} {}}

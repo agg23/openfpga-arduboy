@@ -6,7 +6,7 @@
                 "name": "ROM",
                 "required": true,
                 "parameters": 8,
-                "extensions": ["bin"],
+                "extensions": ["hex"],
                 "address": "0x00000000"
             }
         ]

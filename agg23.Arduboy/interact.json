@@ -1,7 +1,59 @@
 {
   "interact": {
     "magic": "APF_VER_1",
-    "variables": [],
+    "variables": [
+      {
+        "name": "Pixel",
+        "id": 10,
+        "type": "number_u32",
+        "enabled": false,
+        "address": "0x00000000"
+      },
+      {
+        "name": "Addr",
+        "id": 11,
+        "type": "number_u32",
+        "enabled": false,
+        "address": "0x00000004"
+      },
+      {
+        "name": "Reset",
+        "id": 12,
+        "type": "slider_u32",
+        "writeonly": true,
+        "enabled": true,
+        "address": "0x10000000",
+        "defaultval": "0x50",
+        "graphical": {
+          "signed": false,
+          "min": 0,
+          "max": "0xFFFF",
+          "adjust_small": 1,
+          "adjust_large": "0x10"
+        }
+      },
+      {
+        "name": "VSync",
+        "id": 13,
+        "type": "number_u32",
+        "enabled": false,
+        "address": "0x0000000C"
+      },
+      {
+        "name": "HSync",
+        "id": 14,
+        "type": "number_u32",
+        "enabled": false,
+        "address": "0x00000010"
+      },
+      {
+        "name": "3",
+        "id": 15,
+        "type": "number_u32",
+        "enabled": false,
+        "address": "0x00000014"
+      }
+    ],
     "messages": []
   }
 }
