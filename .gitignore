@@ -2,3 +2,4 @@ bitstream.rbf_r
 sim/work/
 sim/*.hex
 sim/*.mem
+sim/*.bin

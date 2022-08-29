@@ -57,19 +57,33 @@ module rom_loader (
     else
     begin
       write_en <= 0;
+      // byte_count_reg[7:0] <= {2'b0, hex_nibble_index};
 
       if(apf_write_en)
       begin
         hex_nibble_index <= hex_nibble_index + 1;
 
         case (hex_nibble_index)
-          // 0: // Line marker ":", ignore
+          0: // Line marker ":", ignore
+          begin
+            if(apf_write_data == 8'h3A)
+            begin
+              // Only advance once we see ":"
+              hex_nibble_index <= 1;
+            end
+            else
+            begin
+              hex_nibble_index <= 0;
+            end
+          end
           1: // Number of bytes in the line, should be 0x10
             line_byte_count[7:4] <= digit;
           2:
             line_byte_count[3:0] <= digit;
           3: // Address
+          begin
             addr[15:12] <= digit;
+          end
           4:
             addr[11:8] <= digit;
           5:
@@ -107,16 +121,16 @@ module rom_loader (
             else
             begin
               // Out of data segment, this is the first nibble of the checksum,
-              // skip to second half of checksum at 11
-              hex_nibble_index <= 11;
+              // wait for next colon
+              hex_nibble_index <= 0;
             end
           end
           // 10, 11: // Checksum
           // 12: // Carriage return
-          13:
-            // Newline
-            // Ready for a new hex line
-            hex_nibble_index <= 0;
+          // 13:
+          //   // Newline
+          //   // Ready for a new hex line
+          //   hex_nibble_index <= 0;
         endcase
       end
     end

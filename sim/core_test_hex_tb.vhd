@@ -1,41 +1,34 @@
-
 library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 use std.textio.all;
 use std.env.stop;
 
-entity rom_loader_tb is
+entity core_test_hex_tb is
 end entity;
 
-architecture rtl of rom_loader_tb is
+architecture rtl of core_test_hex_tb is
   signal clk : std_logic := '0';
   signal clk2 : std_logic := '0';
-
-  signal bridge_wr : std_logic := '0';
-  signal bridge_endian_little : std_logic := '0';
-  signal bridge_addr : unsigned (31 downto 0);
-  signal bridge_wr_data : unsigned (31 downto 0);
-
-  signal write_addr : unsigned (14 downto 0) := 15b"0";
-  signal address_b : unsigned (13 downto 0) := 14b"0";
-
-  signal write_en : std_logic;
-  signal write_data : unsigned (7 downto 0) := 8b"0";
-  -- signal data_b : unsigned (15 downto 0) := 16b"0";
-
-  signal output_a : unsigned (7 downto 0);
-  signal output_b : unsigned (15 downto 0);
-
-  signal hex_line : unsigned (8 * 44 - 1 downto 0);
-
-  constant apf_word_time : time := 4000 ns;
 
   constant period : time := 140 ns;
   constant half_period : time := period / 2;
 
   constant period2 : time := 1000 ns;
   constant half_period2 : time := period2 / 2;
+
+  signal reset_n : std_logic := '0';
+
+  signal bridge_wr : std_logic := '0';
+  signal bridge_endian_little : std_logic := '0';
+  signal bridge_addr : unsigned (31 downto 0);
+  signal bridge_rd_data : unsigned (31 downto 0);
+  signal bridge_wr_data : unsigned (31 downto 0);
+
+  constant apf_word_time : time := 4000 ns;
+
+  shared variable apf_write_buffer : unsigned (31 downto 0) := 32b"0";
+  shared variable apf_write_buffer_fill : integer := 0;
 
   -- From https://stackoverflow.com/a/22905922
   -- String to std_logic_vector convert in 8-bit format using character'pos(c)
@@ -56,40 +49,22 @@ architecture rtl of rom_loader_tb is
     return res_v;
   end function;
 
-  shared variable apf_write_buffer : unsigned (31 downto 0) := 32b"0";
-  shared variable apf_write_buffer_fill : integer := 0;
 begin
   clk <= not clk after half_period;
   clk2 <= not clk2 after half_period2;
 
-  ROM : entity work.rom port map (
-    address_a => write_addr,
-    address_b => address_b,
-
-    clock_a => clk,
-    clock_b => clk2,
-
-    data_a => write_data,
-    data_b => 16b"0",
-    wren_a => write_en,
-    wren_b => '0',
-
-    q_a => output_a,
-    q_b => output_b
-    );
-
-  LOADER : entity work.rom_loader port map (
+  UUT : entity work.core_test_hex port map (
     clk_74a => clk,
-    reset_n => '1',
+    clk_avr_16 => clk2,
 
-    bridge_wr => bridge_wr,
+    reset_n => reset_n,
+
     bridge_endian_little => bridge_endian_little,
     bridge_addr => bridge_addr,
-    bridge_wr_data => bridge_wr_data,
-
-    write_en => write_en,
-    write_addr => write_addr,
-    write_data => write_data
+    bridge_rd => '0',
+    bridge_rd_data => bridge_rd_data,
+    bridge_wr => bridge_wr,
+    bridge_wr_data => bridge_wr_data
     );
 
   process
@@ -216,36 +191,8 @@ begin
       send_line(hex, length + 9 + 4);
     end procedure;
 
-    procedure verify(addr : unsigned (15 downto 0); data : string; length_arg : integer := 0) is
-      alias data_norm : string(data'length downto 1) is data;
-      variable length : integer;
-
-      variable combined_bytes : unsigned (15 downto 0);
-      variable i : integer := 0;
-    begin
-      if length_arg = 0 then
-        -- Length of 0 indicates it's a literal, so use the string length
-        length := data'length;
-      else
-        length := length_arg;
-      end if;
-
-      while i < length loop
-        address_b <= addr(14 downto 1) + i / 4;
-        wait for 3 * period2;
-
-        -- combined_bytes(7 downto 0) := ascii_to_hex(to_unsigned(character'pos(data(i / 4)), 8));
-        -- combined_bytes(15 downto 8) := ascii_to_hex(to_unsigned(character'pos(data(i / 4)), 8));
-        combined_bytes := build_ascii_two_byte_word(data, i);
-        assert output_b = combined_bytes
-        report "Mismatch out: 0x" & to_hstring(output_b) & " expected: 0x" & to_hstring(combined_bytes) & " chars " & data_norm(i / 2 + 1) & data_norm(i / 2 + 2);
-
-        i := i + 4;
-      end loop;
-    end procedure;
-
     -- Reads a hex file. If send_or_verify is true, send the data over APF, otherwise read the data and verify it
-    procedure read_file(send_or_verify : boolean) is
+    procedure read_file is
       file file_handler : text open read_mode is "castleboy.hex";
       variable line_in : line;
       variable line_str : string (1 to 41);
@@ -299,14 +246,7 @@ begin
         -- Address is opposite ordering of data
         address := address(7 downto 0) & address(15 downto 8);
 
-        if send_or_verify then
-          create_send_hex(address, data, length * 2);
-        else
-          if length /= 0 then
-            -- If length is empty, nothing to verify
-            verify(address, data, length * 2);
-          end if;
-        end if;
+        create_send_hex(address, data, length * 2);
 
         -- report length_str & " " & addr_string & " " & data;
 
@@ -319,24 +259,17 @@ begin
       end loop;
     end procedure;
   begin
-    -- send_line(":100000000C942E150C9456150C9456150C945615EC   ");
     bridge_addr <= 32b"0";
 
-    wait for period;
+    wait for period * 2;
 
-    read_file(true);
+    read_file;
 
-    apf_finalize;
+    wait for period * 2;
 
-    read_file(false);
+    reset_n <= '1';
 
-    -- send_verify(16x"0000", "0C942E150C9456150C9456150C945615");
-    -- send_verify(16x"0010", "0C9456150C9456150C9456150C945615");
-    -- send_verify(16x"0000", "00112233445566778899AABBCCDDEEFF");
-    -- send_verify(16x"0010", "00112233445566778899AABBCCDDEEFF");
-    -- send_verify(16x"0010", "00112233445566778899AABBCCDDEEFF");
-
-    -- apf_finalize;
+    wait for 100 ms;
 
     stop;
   end process;

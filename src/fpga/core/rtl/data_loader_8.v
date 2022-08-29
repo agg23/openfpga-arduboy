@@ -44,7 +44,8 @@ module data_loader_8
 
       // TODO: Can this be removed?
       addr_temp = (bridge_write_byte != 0 ? cached_addr : bridge_addr);
-      write_addr <= {addr_temp[ADDRESS_SIZE - 2:0], bridge_write_byte};
+      // write_addr <= {addr_temp[ADDRESS_SIZE - 2:0], bridge_write_byte};
+      write_addr <= addr_temp + bridge_write_byte;
 
       if(bridge_write_byte != 0)
       begin

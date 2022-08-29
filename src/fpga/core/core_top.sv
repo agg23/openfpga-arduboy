@@ -321,9 +321,11 @@ module core_top (
       32'h00000004:
         bridge_rd_data <= byte_count;
       32'h0000000C:
-        bridge_rd_data <= write_en;
+        // bridge_rd_data <= write_en;
+        bridge_rd_data <= pgm_addr;
       32'h00000010:
-        bridge_rd_data <= read_addr;
+        // bridge_rd_data <= read_addr;
+        bridge_rd_data <= pgm_data;
       32'hF8xxxxxx:
       begin
         bridge_rd_data <= cmd_bridge_rd_data;
@@ -496,7 +498,54 @@ module core_top (
   // wire [13:0] write_addr2;
   // wire [15:0] write_data2;
   wire [7:0] write_data;
-  reg [31:0] byte_count;
+  wire [31:0] byte_count;
+
+  // localparam [7:0] STOP_COUNT = 8'h2c;
+
+  // rom_loader rom_loader (
+  //              .clk_74a(clk_74a),
+  //              .reset_n(1),
+
+  //              //  .bridge_wr(write_count != STOP_COUNT ? bridge_wr : 0),
+  //              .bridge_wr(bridge_wr),
+  //              .bridge_endian_little(bridge_endian_little),
+  //              .bridge_addr(bridge_addr),
+  //              .bridge_wr_data(bridge_wr_data),
+
+  //              .write_en(write_en),
+  //              .write_addr(write_addr),
+  //              .write_data(write_data),
+
+  //              .byte_count(byte_count)
+  //            );
+
+  // always @(posedge clk_74a)
+  // begin
+  //   if(write_en)
+  //   begin
+  //     rom[write_addr[14:1]][write_addr[0]] <= write_data;
+  //   end
+  // end
+
+
+  // reg prev_bridge_wr = 0;
+  // reg [7:0] write_count = 0;
+
+  // always @(posedge clk_74a)
+  // begin
+  //   if (bridge_addr[31:28] == 4'b0)
+  //   begin
+  //     if (~prev_bridge_wr && bridge_wr)
+  //     begin
+  //       if(write_count != STOP_COUNT)
+  //       begin
+  //         write_count <= write_count + 1;
+  //       end
+  //     end
+  //   end
+  //   prev_bridge_wr <= bridge_wr;
+  // end
+
 
   rom_loader rom_loader (
                .clk_74a(clk_74a),
@@ -534,7 +583,15 @@ module core_top (
   // begin
   //   if(write_en)
   //   begin
-  //     rom[write_addr2] <= write_data;
+  //     rom[write_addr2] <= write_data2;
+  //   end
+  // end
+
+  // always @(posedge clk_74a)
+  // begin
+  //   if(bridge_wr && bridge_addr == 32'h10000000)
+  //   begin
+  //     read_addr <= bridge_wr_data;
   //   end
   // end
 
@@ -544,8 +601,8 @@ module core_top (
     begin
       rom[write_addr[14:1]][write_addr[0]] <= write_data;
     end
-    //   // else
-    //   // begin
+    //   //   // else
+    //   //   // begin
     // data <= rom[read_addr];
   end
 
@@ -769,7 +826,6 @@ module core_top (
 
   wire clk_sys_40;
   wire clk_avr_16;
-  wire clk_mem_64;
   wire clk_video_5;
   wire clk_video_5_90deg;
 
@@ -783,7 +839,6 @@ module core_top (
                .outclk_1       ( clk_avr_16 ),
                .outclk_2       ( clk_video_5 ),
                .outclk_3       ( clk_video_5_90deg ),
-               .outclk_4       ( clk_mem_64 ),
 
                .locked         ( pll_core_locked )
              );
