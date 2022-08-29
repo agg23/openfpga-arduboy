@@ -1,5 +1,5 @@
 bitstream.rbf_r
-sim/work/
-sim/*.hex
-sim/*.mem
-sim/*.bin
+src/sim/work/
+src/sim/*.hex
+src/sim/*.mem
+src/sim/*.bin
