@@ -316,16 +316,6 @@ module core_top (
       begin
         bridge_rd_data <= 0;
       end
-      32'h00000000:
-        bridge_rd_data <= data;
-      32'h00000004:
-        bridge_rd_data <= byte_count;
-      32'h0000000C:
-        // bridge_rd_data <= write_en;
-        bridge_rd_data <= pgm_addr;
-      32'h00000010:
-        // bridge_rd_data <= read_addr;
-        bridge_rd_data <= pgm_data;
       32'hF8xxxxxx:
       begin
         bridge_rd_data <= cmd_bridge_rd_data;
@@ -443,109 +433,22 @@ module core_top (
                   );
 
   // System ROM
-  reg  [1:0][7:0] rom[16384];
-  // rom rom (
-  //       .clock_a(clk_74a),
-  //       .clock_b(clk_avr_16),
-
-  //       .address_a(write_addr),
-  //       // .address_b(read_addr),
-  //       .address_b(pgm_addr),
-
-  //       .data_a(write_data),
-  //       .data_b(0),
-
-  //       .wren_a(write_en),
-  //       .wren_b(0),
-
-  //       // .q_a() // Purposefully open
-  //       // .q_a(data),
-  //       // .q_b(data)
-  //       .q_b(pgm_data)
-  //       // .address_a(write_addr)
-  //     );
-
-  // TODO: You need to switch it back to 8 bit in and 16 bit out RAM
-  // rom rom (
-  //       .clock_a(clk_74a),
-  //       .clock_b(clk_mem_64),
-
-  //       .address_a(write_addr2),
-  //       // .address_b(read_addr),
-  //       .address_b(pgm_addr),
-
-  //       .data_a(write_data),
-  //       .data_b(0),
-
-  //       .wren_a(write_en),
-  //       .wren_b(0),
-
-  //       // .q_a() // Purposefully open
-  //       // .q_a(data),
-  //       // .q_b(data)
-  //       .q_b(pgm_data)
-  //       // .address_a(write_addr)
-  //     );
+  // As much as I would like to, I can't get a Megafunction RAM to work in the place of this inferred memory
+  // The design will not pass timing if an integer multiple of the 16MHz clock is used, I'm assuming
+  // because of the 74MHz clock doing writes
+  //
+  // A higher than 16MHz clock is required as the inferred memory takes only one cycle for retrieval, but the
+  // megafunction takes 2 or 3
+  reg [1:0][7:0] rom[16384];
 
   wire [13:0] pgm_addr;
   reg [15:0] pgm_data;
-  // wire [15:0] pgm_data;
 
   always @ (posedge clk_avr_16) pgm_data <= rom[pgm_addr];
 
   wire write_en;
   wire [14:0] write_addr;
-  // wire [13:0] write_addr2;
-  // wire [15:0] write_data2;
   wire [7:0] write_data;
-  wire [31:0] byte_count;
-
-  // localparam [7:0] STOP_COUNT = 8'h2c;
-
-  // rom_loader rom_loader (
-  //              .clk_74a(clk_74a),
-  //              .reset_n(1),
-
-  //              //  .bridge_wr(write_count != STOP_COUNT ? bridge_wr : 0),
-  //              .bridge_wr(bridge_wr),
-  //              .bridge_endian_little(bridge_endian_little),
-  //              .bridge_addr(bridge_addr),
-  //              .bridge_wr_data(bridge_wr_data),
-
-  //              .write_en(write_en),
-  //              .write_addr(write_addr),
-  //              .write_data(write_data),
-
-  //              .byte_count(byte_count)
-  //            );
-
-  // always @(posedge clk_74a)
-  // begin
-  //   if(write_en)
-  //   begin
-  //     rom[write_addr[14:1]][write_addr[0]] <= write_data;
-  //   end
-  // end
-
-
-  // reg prev_bridge_wr = 0;
-  // reg [7:0] write_count = 0;
-
-  // always @(posedge clk_74a)
-  // begin
-  //   if (bridge_addr[31:28] == 4'b0)
-  //   begin
-  //     if (~prev_bridge_wr && bridge_wr)
-  //     begin
-  //       if(write_count != STOP_COUNT)
-  //       begin
-  //         write_count <= write_count + 1;
-  //       end
-  //     end
-  //   end
-  //   prev_bridge_wr <= bridge_wr;
-  // end
-
 
   rom_loader rom_loader (
                .clk_74a(clk_74a),
@@ -559,41 +462,7 @@ module core_top (
                .write_en(write_en),
                .write_addr(write_addr),
                .write_data(write_data),
-
-               .byte_count(byte_count),
              );
-
-  // data_loader_16 #(.ADDRESS_MASK_UPPER_4(4'h0)) data_loader_16 (
-  //                  .clk_74a(clk_74a),
-  //                  .bridge_wr(bridge_wr),
-  //                  .bridge_endian_little(bridge_endian_little),
-  //                  .bridge_addr(bridge_addr),
-  //                  .bridge_wr_data(bridge_wr_data),
-
-  //                  .write_en(write_en),
-  //                  .write_addr(write_addr2),
-  //                  .write_data(write_data2),
-  //                );
-
-
-  reg [13:0] read_addr;
-  reg [15:0] data;
-
-  // always @(posedge clk_74a)
-  // begin
-  //   if(write_en)
-  //   begin
-  //     rom[write_addr2] <= write_data2;
-  //   end
-  // end
-
-  // always @(posedge clk_74a)
-  // begin
-  //   if(bridge_wr && bridge_addr == 32'h10000000)
-  //   begin
-  //     read_addr <= bridge_wr_data;
-  //   end
-  // end
 
   always @(posedge clk_74a)
   begin
@@ -601,40 +470,7 @@ module core_top (
     begin
       rom[write_addr[14:1]][write_addr[0]] <= write_data;
     end
-    //   //   // else
-    //   //   // begin
-    // data <= rom[read_addr];
   end
-
-  // reg [31:0] cached_addr;
-  // reg [23:0] cached_data;
-  // reg [1:0] cached_index = 0;
-
-  // always @(posedge clk_74a)
-  // begin
-  //   reg [14:0] temp;
-
-  //   if (bridge_wr && bridge_addr[31:28] == 4'h0)
-  //   begin
-  //     if (cached_index == 0)
-  //     begin
-  //       cached_addr <= bridge_addr;
-  //       cached_data <= bridge_wr_data;
-
-  //       rom[bridge_addr[14:1]][0] <= bridge_wr_data[7:0];
-  //     end
-  //     else
-  //     begin
-  //       temp = cached_addr[14:0] + cached_index;
-
-  //       rom[temp[14:1]][temp[0]] <= cached_data[15:7];
-  //       cached_data <= cached_data >> 8;
-  //     end
-
-  //     cached_index <= cached_index + 1;
-  //   end
-  // end
-
 
   // Core
 

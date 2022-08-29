@@ -9,9 +9,7 @@ module rom_loader (
 
     output reg write_en,
     output reg [14:0] write_addr,
-    output reg [7:0] write_data,
-
-    output wire [31:0] byte_count
+    output reg [7:0] write_data
   );
 
   wire apf_write_en;
@@ -30,10 +28,6 @@ module rom_loader (
                   .write_data(apf_write_data)
                 );
 
-  reg [31:0] byte_count_reg = 0;
-
-  assign byte_count = byte_count_reg;
-
   // 45 bytes in each row
   reg [5:0] hex_nibble_index = 0;
   reg [15:0] addr;
@@ -51,13 +45,11 @@ module rom_loader (
     if(~reset_n)
     begin
       hex_nibble_index <= 0;
-      byte_count_reg <= 0;
       has_digit_high <= 0;
     end
     else
     begin
       write_en <= 0;
-      // byte_count_reg[7:0] <= {2'b0, hex_nibble_index};
 
       if(apf_write_en)
       begin
@@ -104,7 +96,6 @@ module rom_loader (
 
                 write_addr <= addr[14:0];
                 write_data <= {cached_digit_high, digit};
-                byte_count_reg <= addr[14:0];
 
                 addr <= addr + 1;
                 line_byte_count <= line_byte_count - 1;
