@@ -512,77 +512,83 @@ module core_top (
                .spi_mosi(oled_data),
              );
 
-  wire pixelValue, ce_pix;
-  wire VSync, HSync, HBlank, VBlank;
-  wire vs_s, hs_s, vblank_s, hblank_s;
-  wire pixel_value_s;
+  // wire pixelValue, ce_pix;
+  // wire VSync, HSync, HBlank, VBlank;
+  // wire vs_s, hs_s, vblank_s, hblank_s;
+  // wire pixel_value_s;
 
-  synch_3 s_vs(VSync, vs_s, clk_video_5);
-  synch_3 s_hs(HSync, hs_s, clk_video_5);
-  synch_3 s_vb(VBlank, vblank_s, clk_video_5);
-  synch_3 s_hb(HBlank, hblank_s, clk_video_5);
-  synch_3 s_pixel(pixelValue, pixel_value_s, clk_video_5);
+  // synch_3 s_vs(VSync, vs_s, clk_video_5);
+  // synch_3 s_hs(HSync, hs_s, clk_video_5);
+  // synch_3 s_vb(VBlank, vblank_s, clk_video_5);
+  // synch_3 s_hb(HBlank, hblank_s, clk_video_5);
+  // synch_3 s_pixel(pixelValue, pixel_value_s, clk_video_5);
 
-  vgaHdmi vgaHdmi
-          (
-            .clock(clk_sys_40),
-            .reset(~reset_n),
-            .oled_dc(oled_dc),
-            .oled_clk(oled_clk),
-            .oled_data(oled_data),
-            .hsync(HSync),
-            .vsync(VSync),
-            .hblank(HBlank),
-            .vblank(VBlank),
-            .pixelValue(pixelValue),
-            .ce_pix(ce_pix)
-          );
+  // vgaHdmi vgaHdmi
+  //         (
+  //           .clock(clk_sys_40),
+  //           .reset(~reset_n),
+  //           .oled_dc(oled_dc),
+  //           .oled_clk(oled_clk),
+  //           .oled_data(oled_data),
+  //           .hsync(HSync),
+  //           .vsync(VSync),
+  //           .hblank(HBlank),
+  //           .vblank(VBlank),
+  //           .pixelValue(pixelValue),
+  //           .ce_pix(ce_pix)
+  //         );
+
+  wire video_out;
+  video video (
+          .clk_oled(oled_clk),
+          .clk_pixel_double(clk_video_mem_5),
+          .reset_n(reset_n),
+          .oled_dc(oled_dc),
+          .oled_data(oled_data),
+          .v_sync(video_vs),
+          .h_sync(video_hs),
+          .video_en(video_de),
+          .video(video_out)
+        );
 
   //
   // Video cleanup
   // APF scaler requires HSync and VSync to last for a single clock, and video_rgb to be 0 when video_de is low
   //
   reg video_skip_reg = 0;
-  reg video_de_reg;
-  reg video_hs_reg;
-  reg video_vs_reg;
+  // reg video_de_reg;
+  // reg video_hs_reg;
+  // reg video_vs_reg;
   reg [23:0] video_rgb_reg;
 
-  assign video_rgb_clock = clk_video_5;
-  assign video_rgb_clock_90 = clk_video_5_90deg;
-  assign video_de = video_de_reg;
+  assign video_rgb_clock = clk_video_1_25;
+  assign video_rgb_clock_90 = clk_video_1_25_90deg;
+  // assign video_de = video_de_reg;
   assign video_skip = video_skip_reg;
-  assign video_hs = video_hs_reg;
-  assign video_vs = video_vs_reg;
+  // assign video_hs = video_hs_reg;
+  // assign video_vs = video_vs_reg;
   assign video_rgb = video_rgb_reg;
 
   reg hs_prev;
   reg vs_prev;
 
-  always @(posedge clk_video_5)
+  always @(posedge clk_video_1_25)
   begin
-    reg de;
+    // reg de;
 
     video_rgb_reg <= 24'h0;
 
-    // Set HSync and VSync to be high for a single cycle on the rising edge of the HSync and VSync coming out of vgaHDMI
-    video_hs_reg <= ~hs_prev && hs_s;
-    video_vs_reg <= ~vs_prev && vs_s;
-    hs_prev <= hs_s;
-    vs_prev <= vs_s;
-    de = ~(vblank_s || hblank_s);
-    video_de_reg <= de;
+    // // Set HSync and VSync to be high for a single cycle on the rising edge of the HSync and VSync coming out of vgaHDMI
+    // video_hs_reg <= ~hs_prev && hs_s;
+    // video_vs_reg <= ~vs_prev && vs_s;
+    // hs_prev <= hs_s;
+    // vs_prev <= vs_s;
+    // de = ~(vblank_s || hblank_s);
+    // video_de_reg <= de;
 
-    if(de)
+    if(video_de && video_out)
     begin
-      if(pixel_value_s)
-      begin
-        video_rgb_reg <= 24'hFFFFFF;
-      end
-      else
-      begin
-        video_rgb_reg <= 24'h0;
-      end
+      video_rgb_reg <= 24'hFFFFFF;
     end
   end
 
@@ -662,8 +668,9 @@ module core_top (
 
   wire clk_sys_40;
   wire clk_avr_16;
-  wire clk_video_5;
-  wire clk_video_5_90deg;
+  wire clk_video_1_25;
+  wire clk_video_1_25_90deg;
+  wire clk_video_mem_5;
 
   wire    pll_core_locked;
 
@@ -673,8 +680,9 @@ module core_top (
 
                .outclk_0       ( clk_sys_40 ),
                .outclk_1       ( clk_avr_16 ),
-               .outclk_2       ( clk_video_5 ),
-               .outclk_3       ( clk_video_5_90deg ),
+               .outclk_2       ( clk_video_1_25 ),
+               .outclk_3       ( clk_video_1_25_90deg ),
+               .outclk_4       ( clk_video_mem_5 ),
 
                .locked         ( pll_core_locked )
              );
