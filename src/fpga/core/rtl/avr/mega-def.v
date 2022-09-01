@@ -70,8 +70,8 @@
 `define INSTRUCTION_SBCI			{`MEGA_REDUCED_INT, 		16'b0100xxxxxxxxxxxx}//0100kkkkddddkkkk	*
 `define INSTRUCTION_ORI_SBR			{`MEGA_REDUCED_INT, 		16'b0110xxxxxxxxxxxx}//0110kkkkddddkkkk	*
 `define INSTRUCTION_ANDI_CBR		{`MEGA_REDUCED_INT, 		16'b0111xxxxxxxxxxxx}//0111kkkkddddkkkk	*
-`define INSTRUCTION_LDD				{`MEGA_CLASSIC_8K_INT, 		16'b10x0xx0xxxxxxxxx}//10k0kksdddddykkk	*
-`define INSTRUCTION_STD				{`MEGA_CLASSIC_8K_INT, 		16'b10x0xx1xxxxxxxxx}//10k0kksdddddykkk	*
+`define INSTRUCTION_LDD				{`MEGA_CLUSTER_INT, 		16'b10x0xx0xxxxxxxxx}//10k0kksdddddykkk	*
+`define INSTRUCTION_STD				{`MEGA_CLUSTER_INT, 		16'b10x0xx1xxxxxxxxx}//10k0kksdddddykkk	*
 `define INSTRUCTION_LDS				{`MEGA_CLASSIC_8K_INT, 		16'b1001000xxxxx0000}//100100sddddd0000	*
 `define INSTRUCTION_STS				{`MEGA_CLASSIC_8K_INT, 		16'b1001001xxxxx0000}//100100sddddd0000	*
 `define INSTRUCTION_LD_YZP			{`MEGA_CLASSIC_8K_INT, 		16'b1001000xxxxxx001}//100100sdddddy001	*
@@ -131,7 +131,7 @@
 `define INSTRUCTION_COND_BRANCH		{`MEGA_CLUSTER_INT, 		16'b11110xxxxxxxxxxx}//11110Bxxxxxxxbbb	*
 `define INSTRUCTION_BLD				{`MEGA_REDUCED_INT, 		16'b1111100xxxxx0xxx}//111110sddddd0bbb	*
 `define INSTRUCTION_BST				{`MEGA_REDUCED_INT, 		16'b1111101xxxxx0xxx}//111110sddddd0bbb	*
-`define INSTRUCTION_SBRC_SBRS		{`MEGA_REDUCED_INT, 		16'b111111xxxxxx0xxx}//111111Bddddd0bbb	*
+`define INSTRUCTION_SBRC_SBRS		{`MEGA_CLUSTER_INT, 		16'b111111xxxxxx0xxx}//111111Bddddd0bbb	*
 /*
  * !Instruction set.
  */

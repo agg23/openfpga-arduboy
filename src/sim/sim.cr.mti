@@ -5,6 +5,20 @@ Model Technology ModelSim - Intel FPGA Edition vlog 10.5b Compiler 2016.10 Oct  
 Top level modules:
 	atmega_pll
 
+} {} {}} C:/Users/adam/code/fpga/arduboy/src/fpga/core/rtl/avr/atmega_twi_s.v {1 {vlog -work work -stats=none C:/Users/adam/code/fpga/arduboy/src/fpga/core/rtl/avr/atmega_twi_s.v
+Model Technology ModelSim - Intel FPGA Edition vlog 10.5b Compiler 2016.10 Oct  5 2016
+-- Compiling module twi_s
+
+Top level modules:
+	twi_s
+
+} {} {}} C:/Users/adam/code/fpga/arduboy/src/sim/inferred.sv {1 {vlog -work work -sv -stats=none C:/Users/adam/code/fpga/arduboy/src/sim/inferred.sv
+Model Technology ModelSim - Intel FPGA Edition vlog 10.5b Compiler 2016.10 Oct  5 2016
+-- Compiling module inferred_rom
+
+Top level modules:
+	inferred_rom
+
 } {} {}} C:/Users/adam/code/fpga/arduboy/src/fpga/core/rtl/avr/mega-reg.v {1 {vlog -work work -stats=none C:/Users/adam/code/fpga/arduboy/src/fpga/core/rtl/avr/mega-reg.v
 Model Technology ModelSim - Intel FPGA Edition vlog 10.5b Compiler 2016.10 Oct  5 2016
 -- Compiling module mega_regs
@@ -12,48 +26,31 @@ Model Technology ModelSim - Intel FPGA Edition vlog 10.5b Compiler 2016.10 Oct  
 Top level modules:
 	mega_regs
 
-} {} {}} C:/Users/adam/code/fpga/arduboy/sim/inferred.sv {1 {vlog -work work -sv -stats=none C:/Users/adam/code/fpga/arduboy/sim/inferred.sv
+} {} {}} C:/Users/adam/code/fpga/arduboy/src/fpga/core/rtl/avr/atmega-rtc.v {1 {vlog -work work -stats=none C:/Users/adam/code/fpga/arduboy/src/fpga/core/rtl/avr/atmega-rtc.v
 Model Technology ModelSim - Intel FPGA Edition vlog 10.5b Compiler 2016.10 Oct  5 2016
--- Compiling module inferred_rom
+-- Compiling module rtc
 
 Top level modules:
-	inferred_rom
+	rtc
 
-} {} {}} C:/Users/adam/code/fpga/arduboy/src/fpga/core/rtl/avr/atmega32u4.v {1 {vlog -work work -stats=none C:/Users/adam/code/fpga/arduboy/src/fpga/core/rtl/avr/atmega32u4.v
+} {} {}} C:/Users/adam/code/fpga/arduboy/src/fpga/core/rtl/avr/mega-rom.v {1 {vlog -work work -stats=none C:/Users/adam/code/fpga/arduboy/src/fpga/core/rtl/avr/mega-rom.v
 Model Technology ModelSim - Intel FPGA Edition vlog 10.5b Compiler 2016.10 Oct  5 2016
--- Compiling module tim_013_prescaller
--- Compiling module atmega32u4
+-- Compiling module mega_rom
 
 Top level modules:
-	atmega32u4
+	mega_rom
 
 } {} {}} C:/Users/adam/code/fpga/arduboy/src/fpga/core/rtl/avr/mega-def.v {1 {vlog -work work -stats=none C:/Users/adam/code/fpga/arduboy/src/fpga/core/rtl/avr/mega-def.v
 Model Technology ModelSim - Intel FPGA Edition vlog 10.5b Compiler 2016.10 Oct  5 2016
 
-} {} {}} C:/Users/adam/code/fpga/arduboy/sim/core_test.sv {1 {vlog -work work -sv -stats=none C:/Users/adam/code/fpga/arduboy/sim/core_test.sv
+} {} {}} C:/Users/adam/code/fpga/arduboy/src/fpga/core/rtl/avr/mega-ram.v {1 {vlog -work work -stats=none C:/Users/adam/code/fpga/arduboy/src/fpga/core/rtl/avr/mega-ram.v
 Model Technology ModelSim - Intel FPGA Edition vlog 10.5b Compiler 2016.10 Oct  5 2016
--- Compiling module core_test
+-- Compiling module mega_ram
 
 Top level modules:
-	core_test
+	mega_ram
 
-} {} {}} C:/Users/adam/code/fpga/arduboy/src/fpga/core/rtl/avr/ring_counter.v {1 {vlog -work work -stats=none C:/Users/adam/code/fpga/arduboy/src/fpga/core/rtl/avr/ring_counter.v
-Model Technology ModelSim - Intel FPGA Edition vlog 10.5b Compiler 2016.10 Oct  5 2016
--- Compiling module ring_counter
-
-Top level modules:
-	ring_counter
-
-} {} {}} C:/Users/adam/code/fpga/arduboy/src/fpga/core/rtl/avr/mega-core.v {1 {vlog -work work -stats=none C:/Users/adam/code/fpga/arduboy/src/fpga/core/rtl/avr/mega-core.v
-Model Technology ModelSim - Intel FPGA Edition vlog 10.5b Compiler 2016.10 Oct  5 2016
--- Compiling module watchdog
--- Compiling module int_encoder
--- Compiling module mega
-
-Top level modules:
-	mega
-
-} {} {}} C:/Users/adam/code/fpga/arduboy/sim/rom_inferred_tb.vhd {1 {vcom -work work -2008 -explicit -stats=none C:/Users/adam/code/fpga/arduboy/sim/rom_inferred_tb.vhd
+} {} {}} C:/Users/adam/code/fpga/arduboy/src/sim/rom_inferred_tb.vhd {1 {vcom -work work -2008 -explicit -stats=none C:/Users/adam/code/fpga/arduboy/src/sim/rom_inferred_tb.vhd
 Model Technology ModelSim - Intel FPGA Edition vcom 10.5b Compiler 2016.10 Oct  5 2016
 -- Loading package STANDARD
 -- Loading package TEXTIO
@@ -65,26 +62,40 @@ Model Technology ModelSim - Intel FPGA Edition vcom 10.5b Compiler 2016.10 Oct  
 -- Loading package vl_types
 -- Loading entity inferred_rom
 
-} {} {}} C:/Users/adam/code/fpga/arduboy/src/fpga/core/rtl/avr/unstable_counters.v {1 {vlog -work work -stats=none C:/Users/adam/code/fpga/arduboy/src/fpga/core/rtl/avr/unstable_counters.v
+} {} {}} C:/Users/adam/code/fpga/arduboy/src/sim/core_test_hex_tb.vhd {2 {vcom -work work -2008 -explicit -stats=none C:/Users/adam/code/fpga/arduboy/src/sim/core_test_hex_tb.vhd
+Model Technology ModelSim - Intel FPGA Edition vcom 10.5b Compiler 2016.10 Oct  5 2016
+-- Loading package STANDARD
+-- Loading package TEXTIO
+-- Loading package std_logic_1164
+-- Loading package NUMERIC_STD
+-- Loading package ENV
+-- Compiling entity core_test_hex_tb
+-- Compiling architecture rtl of core_test_hex_tb
+** Warning: C:/Users/adam/code/fpga/arduboy/src/sim/core_test_hex_tb.vhd(30): (vcom-1236) Shared variables must be of a protected type.
+** Warning: C:/Users/adam/code/fpga/arduboy/src/sim/core_test_hex_tb.vhd(31): (vcom-1236) Shared variables must be of a protected type.
+-- Loading package vl_types
+-- Loading entity core_test_hex
+
+} {} {}} C:/Users/adam/code/fpga/arduboy/src/fpga/core/rtl/avr/mega-core.v {1 {vlog -work work -stats=none C:/Users/adam/code/fpga/arduboy/src/fpga/core/rtl/avr/mega-core.v
 Model Technology ModelSim - Intel FPGA Edition vlog 10.5b Compiler 2016.10 Oct  5 2016
--- Compiling module unstable_counters
+-- Compiling module watchdog
+-- Compiling module int_encoder
+-- Compiling module mega
 
 Top level modules:
-	unstable_counters
+	mega
 
-} {} {}} C:/Users/adam/code/fpga/arduboy/sim/core_test_hex.sv {1 {vlog -work work -sv -stats=none C:/Users/adam/code/fpga/arduboy/sim/core_test_hex.sv
-Model Technology ModelSim - Intel FPGA Edition vlog 10.5b Compiler 2016.10 Oct  5 2016
--- Compiling module core_test_hex
-
-Top level modules:
-	core_test_hex
-
-} {} {}} C:/Users/adam/code/fpga/arduboy/src/fpga/core/rtl/avr/atmega-spi-m.v {1 {vlog -work work -stats=none C:/Users/adam/code/fpga/arduboy/src/fpga/core/rtl/avr/atmega-spi-m.v
-Model Technology ModelSim - Intel FPGA Edition vlog 10.5b Compiler 2016.10 Oct  5 2016
--- Compiling module atmega_spi_m
-
-Top level modules:
-	atmega_spi_m
+} {} {}} C:/Users/adam/code/fpga/arduboy/src/sim/rom_tb.vhd {1 {vcom -work work -2008 -explicit -stats=none C:/Users/adam/code/fpga/arduboy/src/sim/rom_tb.vhd
+Model Technology ModelSim - Intel FPGA Edition vcom 10.5b Compiler 2016.10 Oct  5 2016
+-- Loading package STANDARD
+-- Loading package TEXTIO
+-- Loading package std_logic_1164
+-- Loading package NUMERIC_STD
+-- Loading package ENV
+-- Compiling entity rom_tb
+-- Compiling architecture rtl of rom_tb
+-- Loading package vl_types
+-- Loading entity rom
 
 } {} {}} C:/Users/adam/code/fpga/arduboy/src/fpga/core/rtl/avr/atmega-tim-8bit.v {1 {vlog -work work -stats=none C:/Users/adam/code/fpga/arduboy/src/fpga/core/rtl/avr/atmega-tim-8bit.v
 Model Technology ModelSim - Intel FPGA Edition vlog 10.5b Compiler 2016.10 Oct  5 2016
@@ -93,10 +104,25 @@ Model Technology ModelSim - Intel FPGA Edition vlog 10.5b Compiler 2016.10 Oct  
 Top level modules:
 	atmega_tim_8bit
 
+} {} {}} C:/Users/adam/code/fpga/arduboy/src/fpga/core/rtl/avr/atmega-spi-m.v {1 {vlog -work work -stats=none C:/Users/adam/code/fpga/arduboy/src/fpga/core/rtl/avr/atmega-spi-m.v
+Model Technology ModelSim - Intel FPGA Edition vlog 10.5b Compiler 2016.10 Oct  5 2016
+-- Compiling module atmega_spi_m
+
+Top level modules:
+	atmega_spi_m
+
+} {} {}} C:/Users/adam/code/fpga/arduboy/src/fpga/core/rtl/avr/atmega_twi.v {2 {vlog -work work -stats=none C:/Users/adam/code/fpga/arduboy/src/fpga/core/rtl/avr/atmega_twi.v
+Model Technology ModelSim - Intel FPGA Edition vlog 10.5b Compiler 2016.10 Oct  5 2016
+-- Compiling module atmega_twi
+** Warning: C:/Users/adam/code/fpga/arduboy/src/fpga/core/rtl/avr/atmega_twi.v(189): (vlog-2600) [RDGN] - Redundant digits in numeric literal.
+
+Top level modules:
+	atmega_twi
+
 } {} {}} C:/Users/adam/code/fpga/arduboy/src/fpga/core/rtl/avr/atmega-tim-10bit.v {2 {vlog -work work -stats=none C:/Users/adam/code/fpga/arduboy/src/fpga/core/rtl/avr/atmega-tim-10bit.v
 Model Technology ModelSim - Intel FPGA Edition vlog 10.5b Compiler 2016.10 Oct  5 2016
 -- Compiling module atmega_tim_10bit
-** Warning: C:/Users/adam/code/fpga/arduboy/src/fpga/core/rtl/avr/atmega-tim-10bit.v(279): (vlog-2600) [RDGN] - Redundant digits in numeric literal.
+** Warning: C:/Users/adam/code/fpga/arduboy/src/fpga/core/rtl/avr/atmega-tim-10bit.v(286): (vlog-2600) [RDGN] - Redundant digits in numeric literal.
 
 Top level modules:
 	atmega_tim_10bit
@@ -108,26 +134,19 @@ Model Technology ModelSim - Intel FPGA Edition vlog 10.5b Compiler 2016.10 Oct  
 Top level modules:
 	atmega_pio
 
-} {} {}} C:/Users/adam/code/fpga/arduboy/sim/core_test_tb.vhd {2 {vcom -work work -2008 -explicit -stats=none C:/Users/adam/code/fpga/arduboy/sim/core_test_tb.vhd
-Model Technology ModelSim - Intel FPGA Edition vcom 10.5b Compiler 2016.10 Oct  5 2016
--- Loading package STANDARD
--- Loading package TEXTIO
--- Loading package std_logic_1164
--- Loading package NUMERIC_STD
--- Loading package ENV
--- Compiling entity core_test_tb
--- Compiling architecture rtl of core_test_tb
-** Warning: C:/Users/adam/code/fpga/arduboy/sim/core_test_tb.vhd(30): (vcom-1236) Shared variables must be of a protected type.
-** Warning: C:/Users/adam/code/fpga/arduboy/sim/core_test_tb.vhd(31): (vcom-1236) Shared variables must be of a protected type.
--- Loading package vl_types
--- Loading entity core_test
-
-} {} {}} C:/Users/adam/code/fpga/arduboy/src/fpga/core/rom.v {1 {vlog -work work -stats=none C:/Users/adam/code/fpga/arduboy/src/fpga/core/rom.v
+} {} {}} C:/Users/adam/code/fpga/arduboy/src/fpga/core/rtl/rom_loader.v {1 {vlog -work work -stats=none C:/Users/adam/code/fpga/arduboy/src/fpga/core/rtl/rom_loader.v
 Model Technology ModelSim - Intel FPGA Edition vlog 10.5b Compiler 2016.10 Oct  5 2016
--- Compiling module rom
+-- Compiling module rom_loader
 
 Top level modules:
-	rom
+	rom_loader
+
+} {} {}} C:/Users/adam/code/fpga/arduboy/src/sim/core_test.sv {1 {vlog -work work -sv -stats=none C:/Users/adam/code/fpga/arduboy/src/sim/core_test.sv
+Model Technology ModelSim - Intel FPGA Edition vlog 10.5b Compiler 2016.10 Oct  5 2016
+-- Compiling module core_test
+
+Top level modules:
+	core_test
 
 } {} {}} C:/Users/adam/code/fpga/arduboy/src/fpga/core/rtl/avr/atmega-eep.v {1 {vlog -work work -stats=none C:/Users/adam/code/fpga/arduboy/src/fpga/core/rtl/avr/atmega-eep.v
 Model Technology ModelSim - Intel FPGA Edition vlog 10.5b Compiler 2016.10 Oct  5 2016
@@ -136,6 +155,13 @@ Model Technology ModelSim - Intel FPGA Edition vlog 10.5b Compiler 2016.10 Oct  
 Top level modules:
 	atmega_eep
 
+} {} {}} C:/Users/adam/code/fpga/arduboy/src/fpga/core/rtl/data_loader_16.v {1 {vlog -work work -sv -stats=none C:/Users/adam/code/fpga/arduboy/src/fpga/core/rtl/data_loader_16.v
+Model Technology ModelSim - Intel FPGA Edition vlog 10.5b Compiler 2016.10 Oct  5 2016
+-- Compiling module data_loader_16
+
+Top level modules:
+	data_loader_16
+
 } {} {}} C:/Users/adam/code/fpga/arduboy/src/fpga/core/rtl/data_loader_8.v {1 {vlog -work work -sv -stats=none C:/Users/adam/code/fpga/arduboy/src/fpga/core/rtl/data_loader_8.v
 Model Technology ModelSim - Intel FPGA Edition vlog 10.5b Compiler 2016.10 Oct  5 2016
 -- Compiling module data_loader_8
@@ -143,7 +169,7 @@ Model Technology ModelSim - Intel FPGA Edition vlog 10.5b Compiler 2016.10 Oct  
 Top level modules:
 	data_loader_8
 
-} {} {}} C:/Users/adam/code/fpga/arduboy/sim/rom_loader_tb.vhd {2 {vcom -work work -2008 -explicit -stats=none C:/Users/adam/code/fpga/arduboy/sim/rom_loader_tb.vhd
+} {} {}} C:/Users/adam/code/fpga/arduboy/src/sim/rom_loader_tb.vhd {2 {vcom -work work -2008 -explicit -stats=none C:/Users/adam/code/fpga/arduboy/src/sim/rom_loader_tb.vhd
 Model Technology ModelSim - Intel FPGA Edition vcom 10.5b Compiler 2016.10 Oct  5 2016
 -- Loading package STANDARD
 -- Loading package TEXTIO
@@ -152,25 +178,19 @@ Model Technology ModelSim - Intel FPGA Edition vcom 10.5b Compiler 2016.10 Oct  
 -- Loading package ENV
 -- Compiling entity rom_loader_tb
 -- Compiling architecture rtl of rom_loader_tb
-** Warning: C:/Users/adam/code/fpga/arduboy/sim/rom_loader_tb.vhd(59): (vcom-1236) Shared variables must be of a protected type.
-** Warning: C:/Users/adam/code/fpga/arduboy/sim/rom_loader_tb.vhd(60): (vcom-1236) Shared variables must be of a protected type.
+** Warning: C:/Users/adam/code/fpga/arduboy/src/sim/rom_loader_tb.vhd(59): (vcom-1236) Shared variables must be of a protected type.
+** Warning: C:/Users/adam/code/fpga/arduboy/src/sim/rom_loader_tb.vhd(60): (vcom-1236) Shared variables must be of a protected type.
 -- Loading package vl_types
 -- Loading entity rom
 -- Loading entity rom_loader
 
-} {} {}} C:/Users/adam/code/fpga/arduboy/src/fpga/core/rtl/avr/atmega-uart.v {1 {vlog -work work -stats=none C:/Users/adam/code/fpga/arduboy/src/fpga/core/rtl/avr/atmega-uart.v
+} {} {}} C:/Users/adam/code/fpga/arduboy/src/fpga/core/rtl/avr/atmega-uart.v {2 {vlog -work work -stats=none C:/Users/adam/code/fpga/arduboy/src/fpga/core/rtl/avr/atmega-uart.v
 Model Technology ModelSim - Intel FPGA Edition vlog 10.5b Compiler 2016.10 Oct  5 2016
 -- Compiling module atmega_uart
+** Warning: C:/Users/adam/code/fpga/arduboy/src/fpga/core/rtl/avr/atmega-uart.v(141): (vlog-2600) [RDGN] - Redundant digits in numeric literal.
 
 Top level modules:
 	atmega_uart
-
-} {} {}} C:/Users/adam/code/fpga/arduboy/src/fpga/core/rtl/avr/atmega-tim-16bit.v {1 {vlog -work work -stats=none C:/Users/adam/code/fpga/arduboy/src/fpga/core/rtl/avr/atmega-tim-16bit.v
-Model Technology ModelSim - Intel FPGA Edition vlog 10.5b Compiler 2016.10 Oct  5 2016
--- Compiling module atmega_tim_16bit
-
-Top level modules:
-	atmega_tim_16bit
 
 } {} {}} C:/Users/adam/code/fpga/arduboy/src/fpga/core/rtl/avr/mega-alu.v {1 {vlog -work work -stats=none C:/Users/adam/code/fpga/arduboy/src/fpga/core/rtl/avr/mega-alu.v
 Model Technology ModelSim - Intel FPGA Edition vlog 10.5b Compiler 2016.10 Oct  5 2016
@@ -179,16 +199,51 @@ Model Technology ModelSim - Intel FPGA Edition vlog 10.5b Compiler 2016.10 Oct  
 Top level modules:
 	mega_alu
 
-} {} {}} C:/Users/adam/code/fpga/arduboy/sim/rom_tb.vhd {1 {vcom -work work -2008 -explicit -stats=none C:/Users/adam/code/fpga/arduboy/sim/rom_tb.vhd
+} {} {}} C:/Users/adam/code/fpga/arduboy/src/fpga/core/rtl/avr/atmega-twi_s_h.v {1 {vlog -work work -stats=none C:/Users/adam/code/fpga/arduboy/src/fpga/core/rtl/avr/atmega-twi_s_h.v
+Model Technology ModelSim - Intel FPGA Edition vlog 10.5b Compiler 2016.10 Oct  5 2016
+
+} {} {}} C:/Users/adam/code/fpga/arduboy/src/fpga/core/rtl/avr/atmega-tim-16bit.v {1 {vlog -work work -stats=none C:/Users/adam/code/fpga/arduboy/src/fpga/core/rtl/avr/atmega-tim-16bit.v
+Model Technology ModelSim - Intel FPGA Edition vlog 10.5b Compiler 2016.10 Oct  5 2016
+-- Compiling module atmega_tim_16bit
+
+Top level modules:
+	atmega_tim_16bit
+
+} {} {}} C:/Users/adam/code/fpga/arduboy/src/fpga/core/rtl/avr/atmega-rng-as-adc.v {1 {vlog -work work -stats=none C:/Users/adam/code/fpga/arduboy/src/fpga/core/rtl/avr/atmega-rng-as-adc.v
+Model Technology ModelSim - Intel FPGA Edition vlog 10.5b Compiler 2016.10 Oct  5 2016
+-- Compiling module atmega_rng_as_adc
+
+Top level modules:
+	atmega_rng_as_adc
+
+} {} {}} C:/Users/adam/code/fpga/arduboy/src/sim/core_test_hex.sv {1 {vlog -work work -sv -stats=none C:/Users/adam/code/fpga/arduboy/src/sim/core_test_hex.sv
+Model Technology ModelSim - Intel FPGA Edition vlog 10.5b Compiler 2016.10 Oct  5 2016
+-- Compiling module core_test_hex
+
+Top level modules:
+	core_test_hex
+
+} {} {}} C:/Users/adam/code/fpga/arduboy/src/sim/core_test_tb.vhd {2 {vcom -work work -2008 -explicit -stats=none C:/Users/adam/code/fpga/arduboy/src/sim/core_test_tb.vhd
 Model Technology ModelSim - Intel FPGA Edition vcom 10.5b Compiler 2016.10 Oct  5 2016
 -- Loading package STANDARD
 -- Loading package TEXTIO
 -- Loading package std_logic_1164
 -- Loading package NUMERIC_STD
 -- Loading package ENV
--- Compiling entity rom_tb
--- Compiling architecture rtl of rom_tb
+-- Compiling entity core_test_tb
+-- Compiling architecture rtl of core_test_tb
+** Warning: C:/Users/adam/code/fpga/arduboy/src/sim/core_test_tb.vhd(31): (vcom-1236) Shared variables must be of a protected type.
+** Warning: C:/Users/adam/code/fpga/arduboy/src/sim/core_test_tb.vhd(32): (vcom-1236) Shared variables must be of a protected type.
+** Warning: C:/Users/adam/code/fpga/arduboy/src/sim/core_test_tb.vhd(38): (vcom-1236) Shared variables must be of a protected type.
+** Warning: C:/Users/adam/code/fpga/arduboy/src/sim/core_test_tb.vhd(39): (vcom-1236) Shared variables must be of a protected type.
 -- Loading package vl_types
--- Loading entity rom
+-- Loading entity core_test
+
+} {} {}} C:/Users/adam/code/fpga/arduboy/src/fpga/core/rtl/avr/io-dmux.v {1 {vlog -work work -stats=none C:/Users/adam/code/fpga/arduboy/src/fpga/core/rtl/avr/io-dmux.v
+Model Technology ModelSim - Intel FPGA Edition vlog 10.5b Compiler 2016.10 Oct  5 2016
+-- Compiling module io_bus_dmux
+
+Top level modules:
+	io_bus_dmux
 
 } {} {}}

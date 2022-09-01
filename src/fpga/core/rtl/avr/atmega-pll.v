@@ -20,26 +20,28 @@
 
 `timescale 1ns / 1ps
 
+
 module atmega_pll # (
+	parameter PLATFORM = "XILINX",
 	parameter BUS_ADDR_DATA_LEN = 16,
 	parameter PLLCSR_ADDR = 'h49,
 	parameter PLLFRQ_ADDR = 'h52,
 	parameter USE_PLL = "TRUE"// If "FALSE" tim_ck_out = clk
 )(
-	input rst,
-	input clk,
-	input clk_pll, // 192Mhz input.
+	input rst_i,
+	input clk_i,
+	input clk_pll_i, // 192Mhz input.
 
-	input [BUS_ADDR_DATA_LEN-1:0]addr_dat,
-	input wr_dat,
-	input rd_dat,
-	input [7:0]bus_dat_in,
-	output reg [7:0]bus_dat_out,
+	input [BUS_ADDR_DATA_LEN-1:0]addr_i,
+	input wr_i,
+	input rd_i,
+	input [7:0]bus_i,
+	output reg [7:0]bus_o,
 	
-	output pll_enabled,
+	output pll_enabled_o,
 
-	output usb_ck_out,
-	output tim_ck_out
+	output usb_ck_o,
+	output tim_ck_o
 	);
 
 reg [7:0]PLLCSR;
@@ -59,9 +61,9 @@ reg tim_clk_1_5;
 reg tim_clk_2;
 reg usb_clk_2_int;
 
-always @ (posedge clk)
+always @ (posedge clk_i)
 begin
-	if(rst)
+	if(rst_i)
 	begin
 		PLLCSR <= 8'h00;
 		PLLFRQ <= 8'h00;
@@ -69,11 +71,11 @@ begin
 	else
 	begin
 		PLLCSR[0] <= PLLCSR[1]; // Make it ready
-		if(wr_dat)
+		if(wr_i)
 		begin
-			case(addr_dat)
-			PLLCSR_ADDR: PLLCSR <= bus_dat_in;
-			PLLFRQ_ADDR: PLLFRQ <= bus_dat_in;
+			case(addr_i)
+			PLLCSR_ADDR: PLLCSR <= bus_i;
+			PLLFRQ_ADDR: PLLFRQ <= bus_i;
 			endcase
 		end
 	end
@@ -137,11 +139,11 @@ begin
 	end
 end
 
-always @ (posedge rst or posedge clk_pll)
+always @ (posedge rst_i or posedge clk_pll_i)
 begin
 	if(USE_PLL == "TRUE")
 	begin
-		if(rst)
+		if(rst_i)
 		begin
 			fractional_cnt <= 0;
 			prescaller_cnt <= 0;
@@ -183,9 +185,9 @@ begin
 	end
 end
 
-always @ (posedge clk)
+always @ (posedge clk_i)
 begin
-	if(rst)
+	if(rst_i)
 		tim_clk_2 <= 1'b0;
 	else
 		tim_clk_2 <= ~tim_clk_2;
@@ -193,17 +195,17 @@ end
 
 always @ *
 begin
-	bus_dat_out = 8'h00;
-	if(rd_dat & ~rst)
+	bus_o = 8'h00;
+	if(rd_i & ~rst_i)
 	begin
-		case(addr_dat)
-		PLLCSR_ADDR: bus_dat_out = PLLCSR;
-		PLLFRQ_ADDR: bus_dat_out = PLLFRQ;
+		case(addr_i)
+		PLLCSR_ADDR: bus_o = PLLCSR;
+		PLLFRQ_ADDR: bus_o = PLLFRQ;
 		endcase
 	end
 end
 
-assign usb_ck_out = USE_PLL != "TRUE" ? 1'b0 : (PLLFRQ[6] ? usb_clk_2_int : pll_clk_out_int);
-assign tim_ck_out = USE_PLL != "TRUE" ? (PLLCSR[4] ? tim_clk_2 : clk) : (PLLFRQ[5:4] == 2'b00 ? (PLLCSR[4] ? tim_clk_2 : clk) : (PLLFRQ[5:4] == 2'b01 ? pll_clk_out_int : (PLLFRQ[5:4] == 2'b11 ? tim_div_cnt[1] : tim_div_cnt[0])));
-assign pll_enabled = USE_PLL != "TRUE" ? 1'b0 : (|PLLFRQ[5:4]);
+assign usb_ck_o = USE_PLL != "TRUE" ? 1'b0 : (PLLFRQ[6] ? usb_clk_2_int : pll_clk_out_int);
+assign tim_ck_o = USE_PLL != "TRUE" ? (PLLCSR[4] ? tim_clk_2 : clk_i) : (PLLFRQ[5:4] == 2'b00 ? (PLLCSR[4] ? tim_clk_2 : clk_i) : (PLLFRQ[5:4] == 2'b01 ? pll_clk_out_int : (PLLFRQ[5:4] == 2'b11 ? tim_div_cnt[1] : tim_div_cnt[0])));
+assign pll_enabled_o = USE_PLL != "TRUE" ? 1'b0 : (|PLLFRQ[5:4]);
 endmodule

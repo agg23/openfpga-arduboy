@@ -108,7 +108,6 @@ module int_encoder # (
 		parameter VECTOR_INT_TABLE_SIZE = 0
 		)(
 		input rst,
-		input halt_ack,
 		input clk,
 		input [((VECTOR_INT_TABLE_SIZE == 0) ? 0 : VECTOR_INT_TABLE_SIZE-1):0]int_sig_in,
 		output int_request,
@@ -130,13 +129,10 @@ begin
 			int_vect <= 0;
 		else
 		begin
-			if(~halt_ack)
-			begin
-				int_vect <= 0;
-				for (j=VECTOR_INT_TABLE_SIZE-1; j>=0; j=j-1)
-				if (int_sig_in[j]) 
-					int_vect <= j+1;
-			end
+			int_vect <= 0;
+			for (j=VECTOR_INT_TABLE_SIZE-1; j>=0; j=j-1)
+			if (int_sig_in[j]) 
+				int_vect <= j+1;
 		end
 	end
 end
@@ -149,21 +145,21 @@ endmodule
  */
 
 module mega #(
+	parameter PLATFORM = "XILINX",
 	parameter BOOT_ADDR = 0,
-	parameter USE_HALT = "FALSE",
 	parameter CORE_TYPE = `MEGA_XMEGA_1,
 	parameter ROM_ADDR_WIDTH = 16,
 	parameter RAM_ADDR_WIDTH = 16,
 	parameter WATCHDOG_CNT_WIDTH = 0,
 	parameter VECTOR_INT_TABLE_SIZE = 0,
-	parameter REGS_REGISTERED = "FALSE"
+	parameter NMI_VECTOR = 0,
+	parameter REGS_REGISTERED = "FALSE",
+	parameter COMASATE_MUL = "FALSE"
 	)(
 	input rst,
 	output sys_rst_out,
 	input clk,
 	input clk_wdt,
-	input halt,
-	output reg halt_ack,
 	output reg[ROM_ADDR_WIDTH - 1:0]pgm_addr,
 	input [15:0]pgm_data,
 	output reg [RAM_ADDR_WIDTH - 1:0]data_addr,
@@ -172,7 +168,7 @@ module mega #(
 	input [7:0]data_in,
 	output reg data_read,
 	input [(VECTOR_INT_TABLE_SIZE == 0 ? 0 : VECTOR_INT_TABLE_SIZE - 1):0]int_sig,
-	output reg [(VECTOR_INT_TABLE_SIZE == 0 ? 0 : VECTOR_INT_TABLE_SIZE - 1):0]int_rst
+	output reg [(VECTOR_INT_TABLE_SIZE == 0 ? 0 : VECTOR_INT_TABLE_SIZE - 1):0]int_ack
     );
 
 reg wdt_rst_out;
@@ -219,11 +215,13 @@ reg [15:0]reg_rd;
 reg reg_rdw;
 reg reg_rdm;
 
+reg reg_rs2_b0;
+
 reg skip_next_clock;
 
-reg halt_int;
-
-reg [7:0]PC_TMP_H;
+reg [7:0]PC_TMP_H_CALL;
+reg [ROM_ADDR_WIDTH - 9:0]PC_TMP_H_ICALL;
+reg [7:0]PC_TMP_H_RET_I;
 
 wire [ROM_ADDR_WIDTH - 1:0]PC_PLUS_ONE = PC + 1;
 wire [ROM_ADDR_WIDTH - 1:0]PC_MINUS_ONE = PC - 1;
@@ -231,10 +229,9 @@ wire [RAM_ADDR_WIDTH - 1:0]SP_PLUS_ONE = SP + 1;
 reg [ROM_ADDR_WIDTH - 1:0]PC_PLUS_RJMP_RCALL;
 reg [ROM_ADDR_WIDTH - 1:0]PC_PLUS_COND_BRANCH;
 
-reg cnt_rst;
 reg unlock_int_registered_step_2;
 
-wire execute	= (~skip_next_clock & ~cnt_rst);
+wire execute	= (~skip_next_clock);
 
 /**************** Interrupt instance  ********************/
 localparam int_bus_size = (VECTOR_INT_TABLE_SIZE > 127) ? 8 :
@@ -254,43 +251,50 @@ int_encoder # (
 	.VECTOR_INT_TABLE_SIZE(VECTOR_INT_TABLE_SIZE)
 	)int_encoder_inst(
 	.rst(core_rst),
-	.halt_ack(halt_ack),
 	.clk(clk),
 	.int_sig_in(int_sig),
 	.int_request(int_request),
 	.int_vect(current_int_vect_request)
 	);
 /**************** !Interrupt instance  ********************/
-reg [ROM_ADDR_WIDTH - 1:0]PC_SNAPSHOOT;
+//reg [ROM_ADDR_WIDTH - 1:0]PC_SNAPSHOOT;
 reg [1:0]last_state;
 
 /*
  * Interrupt registration and CALL to vector table instruction inserter.
  */
+always @ (posedge clk)
+begin
+	current_int_vect_registered <= current_int_vect_request;
+end
+
 always @ *
 begin
 	pgm_data_int = pgm_data;
 	int_registered = 1'b0;
-	int_rst = 1'b0;
+	int_ack = 0;
 	if(VECTOR_INT_TABLE_SIZE != 0)
 	begin
-		if(&{~skip_next_clock, ~cnt_rst, (USE_HALT != "TRUE" | ~halt_int | state_cnt != `STEP0)})
+		if(&{~skip_next_clock})
 		begin
 			case({unlock_int_registered_step_2, int_request, sreg_out[`XMEGA_FLAG_I], state_cnt})
 				{3'b011, `STEP0}: 
 				begin
 					//if(~|last_state)
 					//begin
-					current_int_vect_registered = current_int_vect_request;
+					//current_int_vect_registered = current_int_vect_request;
 					pgm_data_int = 16'b1001010000001110;
 					int_registered = 1'b1;
-					int_rst = 1'b1 << (current_int_vect_request - 1);
-					PC_SNAPSHOOT = PC;
+					int_ack = 1'b1 << (current_int_vect_request - 1);
+					//PC_SNAPSHOOT = PC;
 					//end
 				end
 				{3'b111, `STEP1}: 
 				begin
-					pgm_data_int = {current_int_vect_registered, 1'b0};
+					if(current_int_vect_registered == 1)
+						pgm_data_int = NMI_VECTOR;
+					else
+						pgm_data_int = {current_int_vect_registered - 1, 1'b0};
 					int_registered = 1'b1;
 				end
 			endcase
@@ -303,7 +307,7 @@ end
  */
 always @ (posedge clk)
 begin
-	if(cnt_rst)
+	if(core_rst)
 	begin
 		if(ROM_ADDR_WIDTH > 16)
 		begin
@@ -403,7 +407,7 @@ begin
 		{1'b1, `STEP0, `INSTRUCTION_IN}: reg_rd = data_in_int;
 		{1'b1, `STEP2, `INSTRUCTION_LPM_R},
 		{1'b1, `STEP2, `INSTRUCTION_LPM_ELPM}: reg_rd = reg_rs2[0] ? pgm_data_int[15:8] : pgm_data_int[7:0];
-		{1'b1, `STEP2, `INSTRUCTION_LPM_R_P}: reg_rd = ~reg_rs2[0] ? pgm_data_int[15:8] : pgm_data_int[7:0];
+		{1'b1, `STEP2, `INSTRUCTION_LPM_R_P}: reg_rd = reg_rs2_b0 ? pgm_data_int[15:8] : pgm_data_int[7:0];
 		default: reg_rd = alu_rd;
 	endcase
 /* Set "pgm_addr" */ /*************************************************************/
@@ -426,775 +430,748 @@ initial begin
 	SREG = 8'h00;
 	data_addr_int = 'h00000000;
 	data_out_int = 8'h00;
-	PC_TMP_H = 8'h00;
-	int_rst = 1'b0;
+	PC_TMP_H_CALL = 8'h00;
+	int_ack = 1'b0;
 end
 
-reg halt_ack_n;
+reg pgm_dat_rst;
 
-always @ (posedge clk or posedge core_rst)
+always @ (posedge clk/* or posedge core_rst*/)
 begin
 	if(core_rst)
 	begin
-		halt_int <= 'h0;
-		halt_ack_n <= 'h0;
-		cnt_rst = 1'b1;
+		pgm_dat_rst = 1'b0;
 		PC <= BOOT_ADDR;
 		state_cnt <= `STEP0;
 		//SP <= 8'h00;
-		//SREG <= 8'h00;
+		SREG <= 8'h00;
 		//data_addr_int <= 'h00000000;
 		//data_out_int <= 8'h00;
-		//io_addr_int <= 6'h00;
-		//io_out_int = 8'h00;
-		//PC_TMP_H <= 8'h00;
+		//PC_TMP_H_CALL <= 8'h00;
+		pgm_data_registered = 16'h0000;
 	end
 	else
 	begin
-		halt_int <=  halt;
+		if(~pgm_dat_rst)
+		begin
+			pgm_dat_rst <= 1'b1;
+			pgm_data_registered = 16'h0000;
+		end
 		data_write_int <= 1'b0;
 		data_read_int <= 1'b0;
 		reg_rdw <= 1'b0;
 		skip_next_clock <= 1'b0;
-		if(&{USE_HALT == "TRUE", halt_int, state_cnt == `STEP0, ~skip_next_clock, ~int_registered})
+		PC <= PC_PLUS_ONE;
+		reg_rs2_b0 <= reg_rs2[0];
+		PC_TMP_H_RET_I <= data_in_int;
+		PC_TMP_H_ICALL <= PC[ROM_ADDR_WIDTH - 1:8];
+		PC_TMP_H_CALL <= PC_PLUS_ONE[ROM_ADDR_WIDTH - 1:8];
+		//data_addr_int <= 'h00000000;
+		if(&{state_cnt == `STEP0, ~skip_next_clock})
+			pgm_data_registered = pgm_data_int;
+		unlock_int_registered_step_2 <= 1'b0;
+		rs2a <= {pgm_data_registered[9], pgm_data_registered[3:0]};
+		rs1a <= pgm_data_registered[8:4];
+		rda <= pgm_data_registered[8:4];
+		reg_rs1m <= `REG_MODE_8_BIT;
+		reg_rs2m <= `REG_MODE_8_BIT;
+		reg_rdm <= `REG_MODE_8_BIT;
+		state_cnt <= `STEP0;
+		wdt_rst_out <= 1'b0;
+/* Set "Interrupt flag reset & unlock CALL address insert" */ /*************************************************************/
+		if(VECTOR_INT_TABLE_SIZE != 0 & int_registered)
+			unlock_int_registered_step_2 <= 1'b1;
+		if(~skip_next_clock & pgm_dat_rst)
 		begin
-			halt_ack <= 1'b1;
-			if(WATCHDOG_CNT_WIDTH)
-				wdt_rst_out <= 1'b1;
-			if({~halt_ack_n, ~|last_state})
+			last_state <= state_cnt;
+/* Set "Load default registers state if othervice is not specifyed" */ /*************************************************************/
+			SREG <= sreg_out;
+/* Set "WDR" */ /*************************************************************/
+			casex({execute, state_cnt, CORE_TYPE, pgm_data_registered})
+			{1'b1, `STEP0, `INSTRUCTION_WDR}: wdt_rst_out <= WATCHDOG_CNT_WIDTH ? 1'b1 : 1'b0;
+			endcase
+/* Set "SREG" */ /*************************************************************/
+			casex({execute, state_cnt, CORE_TYPE, pgm_data_registered})
+				{1'b1, `STEP1, `INSTRUCTION_CALL}:
+				begin
+					if(int_registered)
+						SREG[`XMEGA_FLAG_I] <= 1'b0;
+				end
+				{1'b1, `STEP1, `INSTRUCTION_STS}:
+				begin
+					case(pgm_data_int)
+						24'h05F: SREG <= reg_rs1;
+					endcase
+				end
+				{1'b1, `STEP3, `INSTRUCTION_RET},
+				{1'b1, `STEP3, `INSTRUCTION_RETI}:
+				begin
+					if(pgm_data_registered[4])
+						SREG[`XMEGA_FLAG_I] <= 1'b1;
+				end
+				{1'b1, `STEP1, `INSTRUCTION_OUT}:
+				begin
+					case({pgm_data_registered[10:9],pgm_data_registered[3:0]})
+						6'h3F: SREG <= reg_rs1;
+					endcase
+				end
+			endcase
+/* Set "SP" */ /*************************************************************/
+			casex({execute, state_cnt, CORE_TYPE, pgm_data_registered})
+			{1'b1, `STEP0, `INSTRUCTION_RCALL},
+			{1'b1, `STEP1, `INSTRUCTION_RCALL},
+			{1'b1, `STEP0, `INSTRUCTION_CALL},
+			{1'b1, `STEP1, `INSTRUCTION_CALL},
+			{1'b1, `STEP0, `INSTRUCTION_ICALL},
+			{1'b1, `STEP1, `INSTRUCTION_ICALL},
+			{1'b1, `STEP1, `INSTRUCTION_PUSH}: SP <= SP - 1;
+			{1'b1, `STEP0, `INSTRUCTION_RET},
+			{1'b1, `STEP0, `INSTRUCTION_RETI},
+			{1'b1, `STEP1, `INSTRUCTION_RET},
+			{1'b1, `STEP1, `INSTRUCTION_RETI},
+			{1'b1, `STEP0, `INSTRUCTION_POP}: SP <= SP_PLUS_ONE;
+			{1'b1, `STEP1, `INSTRUCTION_STS}:
 			begin
-				halt_ack_n <= 1'b1;
-				PC <= PC_MINUS_ONE;
-			end
-		end
-		else
-		begin
-			halt_ack <= 1'b0;
-			halt_ack_n <= 1'b0;
-			PC <= PC_PLUS_ONE;
-			//data_addr_int <= 'h00000000;
-			//data_out_int <= 8'h00;
-			//io_addr_int <= 6'h00;
-			//io_out_int = 8'h00;
-			if(cnt_rst)
-			begin
-				cnt_rst = 1'b0;
-				pgm_data_registered = 16'h0000;
-			end
-			else if(&{state_cnt == `STEP0, ~skip_next_clock})
-				pgm_data_registered = pgm_data_int;
-			unlock_int_registered_step_2 <= 1'b0;
-			rs2a <= {pgm_data_registered[9], pgm_data_registered[3:0]};
-			rs1a <= pgm_data_registered[8:4];
-			rda <= pgm_data_registered[8:4];
-			reg_rs1m <= `REG_MODE_8_BIT;
-			reg_rs2m <= `REG_MODE_8_BIT;
-			reg_rdm <= `REG_MODE_8_BIT;
-			state_cnt <= `STEP0;
-			wdt_rst_out <= 1'b0;
-	/* Set "Interrupt flag reset & unlock CALL address insert" */ /*************************************************************/
-			if(VECTOR_INT_TABLE_SIZE != 0 & int_registered)
-				unlock_int_registered_step_2 <= 1'b1;
-			if(&{~skip_next_clock, ~cnt_rst})
-			begin
-				last_state <= state_cnt;
-	/* Set "Load default registers state if othervice is not specifyed" */ /*************************************************************/
-				SREG <= sreg_out;
-	/* Set "WDR" */ /*************************************************************/
-				casex({execute, state_cnt, CORE_TYPE, pgm_data_registered})
-				{1'b1, `STEP0, `INSTRUCTION_WDR}: wdt_rst_out <= WATCHDOG_CNT_WIDTH ? 1'b1 : 1'b0;
-				endcase
-	/* Set "SREG" */ /*************************************************************/
-				casex({execute, state_cnt, CORE_TYPE, pgm_data_registered})
-					{1'b1, `STEP1, `INSTRUCTION_CALL}:
+				case(pgm_data_int)
+					24'h005D: SP[7:0] <= reg_rs1;
+					24'h005E:
 					begin
-						if(int_registered)
-							SREG[`XMEGA_FLAG_I] <= 1'b0;
+						if(RAM_ADDR_WIDTH > 8)
+							SP[RAM_ADDR_WIDTH - 1:8] <= reg_rs1;
 					end
-					{1'b1, `STEP1, `INSTRUCTION_STS}:
+				endcase
+			end
+			{1'b1, `STEP1, `INSTRUCTION_OUT}:
+			begin
+				case({pgm_data_registered[10:9],pgm_data_registered[3:0]})
+					6'h3D: SP[7:0] <= reg_rs1;
+					6'h3E: 
 					begin
-						case(data_addr_int)
-							24'h05F: SREG <= reg_rs1;
+						if(RAM_ADDR_WIDTH > 8)
+							SP[RAM_ADDR_WIDTH - 1:8] <= reg_rs1;
+					end
+				endcase
+			end
+			endcase
+/* Set "rs1a" */ /*************************************************************/
+			casex({execute, state_cnt, CORE_TYPE, pgm_data_registered})
+				{1'b1, `STEP0, `INSTRUCTION_MULS}: rs1a[4] <= 1'b1;
+				{1'b1, `STEP0, `INSTRUCTION_FMUL},
+				{1'b1, `STEP0, `INSTRUCTION_FMULS},
+				{1'b1, `STEP0, `INSTRUCTION_MULSU},
+				{1'b1, `STEP0, `INSTRUCTION_FMULSU}: rs1a[4:3] <= 2'b10;
+				{1'b1, `STEP0, `INSTRUCTION_CPI}: rs1a[4] <= 1'b1;
+				{1'b1, `STEP0, `INSTRUCTION_SUBI},
+				{1'b1, `STEP0, `INSTRUCTION_SBCI},
+				{1'b1, `STEP0, `INSTRUCTION_ORI_SBR},
+				{1'b1, `STEP0, `INSTRUCTION_ANDI_CBR}: rs1a[4] <= 1'b1;
+				{1'b1, `STEP0, `INSTRUCTION_ADIW},
+				{1'b1, `STEP0, `INSTRUCTION_SBIW}: rs1a <= {2'b11, pgm_data_registered[5:4], 1'b0};
+				{1'b1, `STEP0, `INSTRUCTION_IJMP},
+				{1'b1, `STEP0, `INSTRUCTION_ICALL}: rs1a <= 5'b11110;
+			endcase
+/* Set "reg_rs1m" */ /*************************************************************/
+			casex({execute, state_cnt, CORE_TYPE, pgm_data_registered})
+				{1'b1, `STEP0, `INSTRUCTION_ADIW},
+				{1'b1, `STEP0, `INSTRUCTION_SBIW},
+				{1'b1, `STEP0, `INSTRUCTION_IJMP},
+				{1'b1, `STEP0, `INSTRUCTION_ICALL}: reg_rs1m <= `REG_MODE_16_BIT;
+			endcase
+/* Set "rs2a" */ /*************************************************************/
+			casex({execute, state_cnt, CORE_TYPE, pgm_data_registered})
+				{1'b1, `STEP0, `INSTRUCTION_MOVW}: rs2a <= {pgm_data_registered[3:0], 1'b0};
+				{1'b1, `STEP0, `INSTRUCTION_MULS}: rs2a[4] <= 1'b1;
+				{1'b1, `STEP0, `INSTRUCTION_FMUL},
+				{1'b1, `STEP0, `INSTRUCTION_FMULS},
+				{1'b1, `STEP0, `INSTRUCTION_MULSU},
+				{1'b1, `STEP0, `INSTRUCTION_FMULSU}: rs2a[4:3] <= 2'b10;
+				{1'b1, `STEP0, `INSTRUCTION_LDD},
+				{1'b1, `STEP0, `INSTRUCTION_STD},
+				{1'b1, `STEP0, `INSTRUCTION_LD_YZP},
+				{1'b1, `STEP1, `INSTRUCTION_LD_YZP},
+				{1'b1, `STEP0, `INSTRUCTION_ST_YZP},
+				{1'b1, `STEP1, `INSTRUCTION_ST_YZP},
+				{1'b1, `STEP0, `INSTRUCTION_LD_YZN},
+				{1'b1, `STEP1, `INSTRUCTION_LD_YZN},
+				{1'b1, `STEP0, `INSTRUCTION_ST_YZN},
+				{1'b1, `STEP1, `INSTRUCTION_ST_YZN}: rs2a <= {3'b111, ~pgm_data_registered[3], 1'b0};
+				{1'b1, `STEP0, `INSTRUCTION_LD_X},
+				{1'b1, `STEP1, `INSTRUCTION_LD_X},
+				{1'b1, `STEP0, `INSTRUCTION_ST_X},
+				{1'b1, `STEP1, `INSTRUCTION_ST_X},
+				{1'b1, `STEP0, `INSTRUCTION_LD_XP},
+				{1'b1, `STEP1, `INSTRUCTION_LD_XP},
+				{1'b1, `STEP0, `INSTRUCTION_ST_XP},
+				{1'b1, `STEP1, `INSTRUCTION_ST_XP},
+				{1'b1, `STEP0, `INSTRUCTION_LD_XN},
+				{1'b1, `STEP1, `INSTRUCTION_LD_XN},
+				{1'b1, `STEP0, `INSTRUCTION_ST_XN},
+				{1'b1, `STEP1, `INSTRUCTION_ST_XN}: rs2a <= 5'b11010;
+				{1'b1, `STEP0, `INSTRUCTION_LPM_R},
+				{1'b1, `STEP1, `INSTRUCTION_LPM_R},
+				{1'b1, `STEP0, `INSTRUCTION_LPM_R_P},
+				{1'b1, `STEP1, `INSTRUCTION_LPM_R_P},
+				{1'b1, `STEP0, `INSTRUCTION_LPM_ELPM},
+				{1'b1, `STEP1, `INSTRUCTION_LPM_ELPM}: rs2a <= 5'b11110;
+			endcase
+/* Set "reg_rs2m" */ /*************************************************************/
+			casex({execute, state_cnt, CORE_TYPE, pgm_data_registered})
+				{1'b1, `STEP0, `INSTRUCTION_MOVW},
+				{1'b1, `STEP0, `INSTRUCTION_LDD},
+				{1'b1, `STEP0, `INSTRUCTION_STD},
+				{1'b1, `STEP0, `INSTRUCTION_LD_YZP},
+				{1'b1, `STEP1, `INSTRUCTION_LD_YZP},
+				{1'b1, `STEP0, `INSTRUCTION_ST_YZP},
+				{1'b1, `STEP1, `INSTRUCTION_ST_YZP},
+				{1'b1, `STEP0, `INSTRUCTION_LD_YZN},
+				{1'b1, `STEP1, `INSTRUCTION_LD_YZN},
+				{1'b1, `STEP0, `INSTRUCTION_ST_YZN},
+				{1'b1, `STEP1, `INSTRUCTION_ST_YZN},
+				{1'b1, `STEP0, `INSTRUCTION_LD_X},
+				{1'b1, `STEP1, `INSTRUCTION_LD_X},
+				{1'b1, `STEP0, `INSTRUCTION_ST_X},
+				{1'b1, `STEP1, `INSTRUCTION_ST_X},
+				{1'b1, `STEP0, `INSTRUCTION_LD_XP},
+				{1'b1, `STEP1, `INSTRUCTION_LD_XP},
+				{1'b1, `STEP0, `INSTRUCTION_ST_XP},
+				{1'b1, `STEP1, `INSTRUCTION_ST_XP},
+				{1'b1, `STEP0, `INSTRUCTION_LD_XN},
+				{1'b1, `STEP1, `INSTRUCTION_LD_XN},
+				{1'b1, `STEP0, `INSTRUCTION_ST_XN},
+				{1'b1, `STEP1, `INSTRUCTION_ST_XN},
+				{1'b1, `STEP0, `INSTRUCTION_LPM_R},
+				{1'b1, `STEP1, `INSTRUCTION_LPM_R},
+				{1'b1, `STEP0, `INSTRUCTION_LPM_R_P},
+				{1'b1, `STEP1, `INSTRUCTION_LPM_R_P},
+				{1'b1, `STEP0, `INSTRUCTION_LPM_ELPM},
+				{1'b1, `STEP1, `INSTRUCTION_LPM_ELPM}: reg_rs2m <= `REG_MODE_16_BIT;
+			endcase
+/* Set "skip_next_clock" */ /*************************************************************/
+			casex({execute, state_cnt, CORE_TYPE, pgm_data_registered})
+				{1'b1, `STEP0, `INSTRUCTION_COND_BRANCH}: /***********************/
+				begin
+					if(sreg_out[pgm_data_registered[2:0]] == ~pgm_data_registered[10])
+						skip_next_clock <= 1'b1;
+				end
+				{1'b1, `STEP1, `INSTRUCTION_CPSE}:
+				begin
+					if(reg_rs1 == reg_rs2)
+					begin
+						casex({CORE_TYPE, pgm_data_int})
+							`INSTRUCTION_LDS,
+							`INSTRUCTION_STS,
+							`INSTRUCTION_JMP,
+							`INSTRUCTION_CALL: ;
+							default: skip_next_clock <= 1'b1;
 						endcase
 					end
-					{1'b1, `STEP3, `INSTRUCTION_RET},
-					{1'b1, `STEP3, `INSTRUCTION_RETI}:
+				end
+				{1'b1, `STEP1, `INSTRUCTION_SBRC_SBRS}:
+				begin
+					if(reg_rs1[pgm_data_registered[2:0]] == pgm_data_registered[9])
 					begin
-						if(pgm_data_registered[4])
-							SREG[`XMEGA_FLAG_I] <= 1'b1;
-					end
-					{1'b1, `STEP1, `INSTRUCTION_OUT}:
-					begin
-						case({pgm_data_registered[10:9],pgm_data_registered[3:0]})
-							6'h3F: SREG <= reg_rs1;
+						casex({CORE_TYPE, pgm_data_int})
+							`INSTRUCTION_LDS,
+							`INSTRUCTION_STS,
+							`INSTRUCTION_JMP,
+							`INSTRUCTION_CALL: ;
+							default: skip_next_clock <= 1'b1;
 						endcase
 					end
-				endcase
-	/* Set "SP" */ /*************************************************************/
-				casex({execute, state_cnt, CORE_TYPE, pgm_data_registered})
+				end
+				{1'b1, `STEP1, `INSTRUCTION_SBIC_SBIS}:
+				begin
+					if(data_in_int[pgm_data_registered[2:0]] == pgm_data_registered[9])
+					begin
+						casex({CORE_TYPE, pgm_data_int})
+							`INSTRUCTION_LDS,
+							`INSTRUCTION_STS,
+							`INSTRUCTION_JMP,
+							`INSTRUCTION_CALL: ;
+							default: skip_next_clock <= 1'b1;
+						endcase
+					end
+				end
+				{1'b1, `STEP0, `INSTRUCTION_RJMP},
+				{1'b1, `STEP1, `INSTRUCTION_JMP},
+				{1'b1, `STEP1, `INSTRUCTION_IJMP},
+				{1'b1, `STEP1, `INSTRUCTION_RCALL},
+				{1'b1, `STEP1, `INSTRUCTION_CALL},
+				{1'b1, `STEP1, `INSTRUCTION_ICALL},
+				{1'b1, `STEP3, `INSTRUCTION_RET},
+				{1'b1, `STEP3, `INSTRUCTION_RETI}: skip_next_clock <= 1'b1;
+			endcase
+/* Set "rda" */ /*************************************************************/
+			casex({execute, state_cnt, CORE_TYPE, pgm_data_registered})
+				{1'b1, `STEP0, `INSTRUCTION_MOVW}: rda <= {pgm_data_registered[7:4], 1'b0};
+				{1'b1, `STEP0, `INSTRUCTION_LDI}: rda[4] <= 1'b1;
+				{1'b1, `STEP0, `INSTRUCTION_MUL},
+				{1'b1, `STEP0, `INSTRUCTION_MULS},
+				{1'b1, `STEP0, `INSTRUCTION_FMUL},
+				{1'b1, `STEP0, `INSTRUCTION_FMULS},
+				{1'b1, `STEP0, `INSTRUCTION_MULSU},
+				{1'b1, `STEP0, `INSTRUCTION_FMULSU},
+				{1'b1, `STEP1, `INSTRUCTION_LPM_ELPM}: rda <= 5'h00;
+				{1'b1, `STEP0, `INSTRUCTION_SUBI},
+				{1'b1, `STEP0, `INSTRUCTION_SBCI},
+				{1'b1, `STEP0, `INSTRUCTION_ORI_SBR},
+				{1'b1, `STEP0, `INSTRUCTION_ANDI_CBR}: rda[4] <= 1'b1;
+				{1'b1, `STEP0, `INSTRUCTION_ADIW},
+				{1'b1, `STEP0, `INSTRUCTION_SBIW}: rda <= {2'b11, pgm_data_registered[5:4], 1'b0};
+				{1'b1, `STEP1, `INSTRUCTION_LD_YZP},
+				{1'b1, `STEP0, `INSTRUCTION_ST_YZP},
+				{1'b1, `STEP1, `INSTRUCTION_LD_YZN},
+				{1'b1, `STEP1, `INSTRUCTION_ST_YZN}: rda <= {3'b111, ~pgm_data_registered[3], 1'b0};
+				{1'b1, `STEP1, `INSTRUCTION_LD_XP},
+				{1'b1, `STEP0, `INSTRUCTION_ST_XP},
+				{1'b1, `STEP1, `INSTRUCTION_LD_XN},
+				{1'b1, `STEP1, `INSTRUCTION_ST_XN}: rda <= 5'b11010;
+				{1'b1, `STEP0, `INSTRUCTION_LPM_R_P}: rda <= 5'b11110;
+			endcase
+/* Set "reg_rdm" */ /*************************************************************/
+			casex({execute, state_cnt, CORE_TYPE, pgm_data_registered})
+				{1'b1, `STEP0, `INSTRUCTION_MOVW},
+				{1'b1, `STEP0, `INSTRUCTION_MUL},
+				{1'b1, `STEP0, `INSTRUCTION_MULS},
+				{1'b1, `STEP0, `INSTRUCTION_FMUL},
+				{1'b1, `STEP0, `INSTRUCTION_FMULS},
+				{1'b1, `STEP0, `INSTRUCTION_MULSU},
+				{1'b1, `STEP0, `INSTRUCTION_FMULSU},
+				{1'b1, `STEP0, `INSTRUCTION_ADIW},
+				{1'b1, `STEP0, `INSTRUCTION_SBIW},
+				{1'b1, `STEP1, `INSTRUCTION_LD_YZP},
+				{1'b1, `STEP0, `INSTRUCTION_ST_YZP},
+				{1'b1, `STEP1, `INSTRUCTION_LD_YZN},
+				{1'b1, `STEP1, `INSTRUCTION_ST_YZN},
+				{1'b1, `STEP1, `INSTRUCTION_LD_XP},
+				{1'b1, `STEP0, `INSTRUCTION_ST_XP},
+				{1'b1, `STEP1, `INSTRUCTION_LD_XN},
+				{1'b1, `STEP1, `INSTRUCTION_ST_XN},
+				{1'b1, `STEP0, `INSTRUCTION_LPM_R_P}: reg_rdm <= `REG_MODE_16_BIT;
+			endcase
+/* Set "reg_rdw" */ /*************************************************************/
+			casex({execute, state_cnt, CORE_TYPE, pgm_data_registered})
+				{1'b1, `STEP0, `INSTRUCTION_LDI},
+				{1'b1, `STEP0, `INSTRUCTION_MOVW},
+				{1'b1, `STEP0, `INSTRUCTION_MUL},
+				{1'b1, `STEP0, `INSTRUCTION_MULS},
+				{1'b1, `STEP0, `INSTRUCTION_FMUL},
+				{1'b1, `STEP0, `INSTRUCTION_FMULS},
+				{1'b1, `STEP0, `INSTRUCTION_MULSU},
+				{1'b1, `STEP0, `INSTRUCTION_FMULSU},
+				{1'b1, `STEP0, `INSTRUCTION_INC},
+				{1'b1, `STEP0, `INSTRUCTION_DEC},
+				{1'b1, `STEP0, `INSTRUCTION_ASR},
+				{1'b1, `STEP0, `INSTRUCTION_LSR},
+				{1'b1, `STEP0, `INSTRUCTION_ROR},
+				{1'b1, `STEP0, `INSTRUCTION_SUB},
+				{1'b1, `STEP0, `INSTRUCTION_SBC},
+				{1'b1, `STEP0, `INSTRUCTION_ADD},
+				{1'b1, `STEP0, `INSTRUCTION_ADC},
+				{1'b1, `STEP0, `INSTRUCTION_SWAP},
+				{1'b1, `STEP0, `INSTRUCTION_AND},
+				{1'b1, `STEP0, `INSTRUCTION_EOR},
+				{1'b1, `STEP0, `INSTRUCTION_OR},
+				{1'b1, `STEP0, `INSTRUCTION_MOV},
+				{1'b1, `STEP0, `INSTRUCTION_BLD},
+				{1'b1, `STEP0, `INSTRUCTION_SUBI},
+				{1'b1, `STEP0, `INSTRUCTION_SBCI},
+				{1'b1, `STEP0, `INSTRUCTION_ORI_SBR},
+				{1'b1, `STEP0, `INSTRUCTION_ANDI_CBR},
+				{1'b1, `STEP0, `INSTRUCTION_COM},
+				{1'b1, `STEP0, `INSTRUCTION_NEG},
+				{1'b1, `STEP0, `INSTRUCTION_ADIW},
+				{1'b1, `STEP0, `INSTRUCTION_SBIW},
+				{1'b1, `STEP1, `INSTRUCTION_POP},
+				{1'b1, `STEP2, `INSTRUCTION_LDS},
+				{1'b1, `STEP1, `INSTRUCTION_LDS16},
+				{1'b1, `STEP2, `INSTRUCTION_LDD},
+				{1'b1, `STEP1, `INSTRUCTION_LD_YZP},
+				{1'b1, `STEP2, `INSTRUCTION_LD_YZP},
+				{1'b1, `STEP0, `INSTRUCTION_ST_YZP},
+				{1'b1, `STEP1, `INSTRUCTION_LD_YZN},
+				{1'b1, `STEP2, `INSTRUCTION_LD_YZN},
+				{1'b1, `STEP1, `INSTRUCTION_ST_YZN},
+				{1'b1, `STEP2, `INSTRUCTION_LD_X},
+				{1'b1, `STEP1, `INSTRUCTION_LD_XP},
+				{1'b1, `STEP2, `INSTRUCTION_LD_XP},
+				{1'b1, `STEP0, `INSTRUCTION_ST_XP},
+				{1'b1, `STEP1, `INSTRUCTION_LD_XN},
+				{1'b1, `STEP2, `INSTRUCTION_LD_XN},
+				{1'b1, `STEP1, `INSTRUCTION_ST_XN},
+				{1'b1, `STEP1, `INSTRUCTION_IN},
+				{1'b1, `STEP1, `INSTRUCTION_LPM_R},
+				{1'b1, `STEP0, `INSTRUCTION_LPM_R_P},
+				{1'b1, `STEP1, `INSTRUCTION_LPM_R_P},
+				{1'b1, `STEP1, `INSTRUCTION_LPM_ELPM}: reg_rdw <= 1'b1;
+			endcase
+/* Set "data_addr" */ /*************************************************************/
+			casex({execute, state_cnt, CORE_TYPE, pgm_data_registered})
 				{1'b1, `STEP0, `INSTRUCTION_RCALL},
 				{1'b1, `STEP1, `INSTRUCTION_RCALL},
 				{1'b1, `STEP0, `INSTRUCTION_CALL},
 				{1'b1, `STEP1, `INSTRUCTION_CALL},
 				{1'b1, `STEP0, `INSTRUCTION_ICALL},
 				{1'b1, `STEP1, `INSTRUCTION_ICALL},
-				{1'b1, `STEP1, `INSTRUCTION_PUSH}: SP <= SP - 1;
+				{1'b1, `STEP1, `INSTRUCTION_PUSH}: data_addr_int <= SP;
+				{1'b1, `STEP0, `INSTRUCTION_RET},
+				{1'b1, `STEP0, `INSTRUCTION_RETI},
+				{1'b1, `STEP1, `INSTRUCTION_RET},
+				{1'b1, `STEP1, `INSTRUCTION_RETI}: data_addr_int <= SP_PLUS_ONE;
+				//{1'b1, `STEP2, `INSTRUCTION_RET},
+				//{1'b1, `STEP2, `INSTRUCTION_RETI}: data_addr_int <= SP;
+				{1'b1, `STEP0, `INSTRUCTION_POP}: data_addr_int <= SP_PLUS_ONE;
+				//{1'b1, `STEP1, `INSTRUCTION_POP}: data_addr_int <= SP;
+				{1'b1, `STEP1, `INSTRUCTION_LDS}: 
+				begin
+					if(ROM_ADDR_WIDTH > 16) 
+						data_addr_int <= {RAMPD, pgm_data_int};
+					else
+						data_addr_int <= pgm_data_int;
+				end
+				{1'b1, `STEP0, `INSTRUCTION_LDS16}: data_addr_int <= {pgm_data_registered[10:8], pgm_data_registered[3:0]};
+				{1'b1, `STEP1, `INSTRUCTION_STS}: 
+				begin
+					if(ROM_ADDR_WIDTH > 16) 
+						data_addr_int <= {RAMPD, pgm_data_int};
+					else
+						data_addr_int <= pgm_data_int;
+				end
+				{1'b1, `STEP0, `INSTRUCTION_STS16}: data_addr_int <= {pgm_data_registered[10:8], pgm_data_registered[3:0]};
+				{1'b1, `STEP1, `INSTRUCTION_LDD}:  
+				begin
+					if(ROM_ADDR_WIDTH > 16) 
+						data_addr_int <= {pgm_data_registered[3] ? RAMPY : RAMPZ, reg_rs2} + {pgm_data_registered[13], pgm_data_registered[11:10], pgm_data_registered[2:0]};
+					else
+						data_addr_int <= reg_rs2 + {pgm_data_registered[13], pgm_data_registered[11:10], pgm_data_registered[2:0]};
+				end
+				{1'b1, `STEP1, `INSTRUCTION_STD}: 
+				begin
+					if(ROM_ADDR_WIDTH > 16) 
+						data_addr_int <= {pgm_data_registered[3] ? RAMPY : RAMPZ, reg_rs2} + {pgm_data_registered[13], pgm_data_registered[11:10], pgm_data_registered[2:0]};
+					else
+						data_addr_int <= reg_rs2 + {pgm_data_registered[13], pgm_data_registered[11:10], pgm_data_registered[2:0]};
+				end
+				{1'b1, `STEP1, `INSTRUCTION_LD_YZP}: 
+				begin
+					if(ROM_ADDR_WIDTH > 16) 
+						data_addr_int <= {pgm_data_registered[3] ? RAMPY : RAMPZ, reg_rs2};
+					else
+						data_addr_int <= reg_rs2;
+				end
+				{1'b1, `STEP1, `INSTRUCTION_ST_YZP}: 
+				begin
+					if(ROM_ADDR_WIDTH > 16) 
+						data_addr_int <= {pgm_data_registered[3] ? RAMPY : RAMPZ, reg_rs2};
+					else
+						data_addr_int <= reg_rs2;
+				end
+				{1'b1, `STEP1, `INSTRUCTION_LD_YZN}: 
+				begin
+					if(ROM_ADDR_WIDTH > 16) 
+						data_addr_int <= {pgm_data_registered[3] ? RAMPY : RAMPZ, reg_rs2} - 1;
+					else
+						data_addr_int <= reg_rs2 - 1;
+				end
+				{1'b1, `STEP1, `INSTRUCTION_ST_YZN}: 
+				begin
+					if(ROM_ADDR_WIDTH > 16) 
+						data_addr_int <= {pgm_data_registered[3] ? RAMPY : RAMPZ, reg_rs2} - 1;
+					else
+						data_addr_int <= reg_rs2 - 1;
+				end
+				{1'b1, `STEP1, `INSTRUCTION_LD_X}: 
+				begin
+					if(ROM_ADDR_WIDTH > 16) 
+						data_addr_int <= {RAMPX, reg_rs2};
+					else
+						data_addr_int <= reg_rs2;
+				end
+				{1'b1, `STEP1, `INSTRUCTION_ST_X}: 
+				begin
+					if(ROM_ADDR_WIDTH > 16) 
+						data_addr_int <= {RAMPX, reg_rs2};
+					else
+						data_addr_int <= reg_rs2;
+				end
+				{1'b1, `STEP1, `INSTRUCTION_LD_XP}: 
+				begin
+					if(ROM_ADDR_WIDTH > 16) 
+						data_addr_int <= {RAMPX, reg_rs2};
+					else
+						data_addr_int <= reg_rs2;
+				end
+				{1'b1, `STEP1, `INSTRUCTION_ST_XP}: 
+				begin
+					if(ROM_ADDR_WIDTH > 16) 
+						data_addr_int <= {RAMPX, reg_rs2};
+					else
+						data_addr_int <= reg_rs2;
+				end
+				{1'b1, `STEP1, `INSTRUCTION_LD_XN}: 
+				begin
+					if(ROM_ADDR_WIDTH > 16) 
+						data_addr_int <= {RAMPX, reg_rs2} - 1;
+					else
+						data_addr_int <= reg_rs2 - 1;
+				end
+				{1'b1, `STEP1, `INSTRUCTION_ST_XN}: 
+				begin
+					if(ROM_ADDR_WIDTH > 16) 
+						data_addr_int <= {RAMPX, reg_rs2} - 1;
+					else
+						data_addr_int <= reg_rs2 - 1;
+				end
+				{1'b1, `STEP1, `INSTRUCTION_OUT},
+				{1'b1, `STEP0, `INSTRUCTION_IN}: data_addr_int <= {pgm_data_registered[10:9],pgm_data_registered[3:0]} + 'h20;
+				{1'b1, `STEP0, `INSTRUCTION_CBI_SBI},
+				{1'b1, `STEP0, `INSTRUCTION_SBIC_SBIS}: data_addr_int <= pgm_data_registered[7:3] + 'h20;
+			endcase
+/* Set "data_out" */ /*************************************************************/
+			casex({execute, state_cnt, CORE_TYPE, pgm_data_registered})
+				{1'b1, `STEP0, `INSTRUCTION_RCALL}: data_out_int <= PC;
+				{1'b1, `STEP1, `INSTRUCTION_RCALL}: data_out_int <= PC[ROM_ADDR_WIDTH - 1:8];
+				{1'b1, `STEP0, `INSTRUCTION_CALL}: 
+				begin
+					data_out_int <= PC_PLUS_ONE[7:0];
+					if(int_registered)
+						data_out_int <= PC;
+				end
+				{1'b1, `STEP1, `INSTRUCTION_CALL}: data_out_int <= PC_TMP_H_CALL;
+				{1'b1, `STEP0, `INSTRUCTION_ICALL}: data_out_int <= PC[7:0];
+				{1'b1, `STEP1, `INSTRUCTION_ICALL}: data_out_int <= PC_TMP_H_ICALL;
+				{1'b1, `STEP1, `INSTRUCTION_PUSH},
+				{1'b1, `STEP1, `INSTRUCTION_STS},
+				{1'b1, `STEP0, `INSTRUCTION_STS16},
+				{1'b1, `STEP1, `INSTRUCTION_STD},
+				{1'b1, `STEP1, `INSTRUCTION_ST_YZP},
+				{1'b1, `STEP2, `INSTRUCTION_ST_YZN},
+				{1'b1, `STEP1, `INSTRUCTION_ST_X},
+				{1'b1, `STEP1, `INSTRUCTION_ST_XP},
+				{1'b1, `STEP2, `INSTRUCTION_ST_XN}: data_out_int <= reg_rs1;
+				{1'b1, `STEP1, `INSTRUCTION_OUT}: data_out_int = reg_rs1;
+				{1'b1, `STEP1, `INSTRUCTION_CBI_SBI}:
+				begin
+					if(pgm_data_registered[9])
+						data_out_int <= data_in | (2 ** pgm_data_registered[2:0]);
+					else
+						data_out_int <= data_in & ~(2 ** pgm_data_registered[2:0]);
+				end
+			endcase
+/* Set "data_write" */ /*************************************************************/
+			casex({execute, state_cnt, CORE_TYPE, pgm_data_registered})
+				{1'b1, `STEP0, `INSTRUCTION_RCALL},
+				{1'b1, `STEP1, `INSTRUCTION_RCALL},
+				{1'b1, `STEP0, `INSTRUCTION_CALL},
+				{1'b1, `STEP1, `INSTRUCTION_CALL},
+				{1'b1, `STEP0, `INSTRUCTION_ICALL},
+				{1'b1, `STEP1, `INSTRUCTION_ICALL},
+				{1'b1, `STEP1, `INSTRUCTION_PUSH},
+				{1'b1, `STEP0, `INSTRUCTION_STS16},
+				{1'b1, `STEP1, `INSTRUCTION_STD},
+				{1'b1, `STEP1, `INSTRUCTION_ST_YZP},
+				{1'b1, `STEP2, `INSTRUCTION_ST_YZN},
+				{1'b1, `STEP1, `INSTRUCTION_ST_X},
+				{1'b1, `STEP1, `INSTRUCTION_ST_XP},
+				{1'b1, `STEP2, `INSTRUCTION_ST_XN},
+				{1'b1, `STEP1, `INSTRUCTION_STS},
+				{1'b1, `STEP1, `INSTRUCTION_OUT},
+				{1'b1, `STEP1, `INSTRUCTION_CBI_SBI}: data_write_int <= 1'b1;
+			endcase
+/* Set "data_read" */ /*************************************************************/
+			casex({execute, state_cnt, CORE_TYPE, pgm_data_registered})
+				{1'b1, `STEP1, `INSTRUCTION_RET},
+				{1'b1, `STEP1, `INSTRUCTION_RETI},
+				{1'b1, `STEP2, `INSTRUCTION_RET},
+				{1'b1, `STEP2, `INSTRUCTION_RETI},
+				{1'b1, `STEP1, `INSTRUCTION_POP},
+				{1'b1, `STEP1, `INSTRUCTION_LDS16},
+				{1'b1, `STEP2, `INSTRUCTION_LDD},
+				{1'b1, `STEP2, `INSTRUCTION_LD_YZP},
+				{1'b1, `STEP2, `INSTRUCTION_LD_YZN},
+				{1'b1, `STEP2, `INSTRUCTION_LD_X},
+				{1'b1, `STEP2, `INSTRUCTION_LD_XP},
+				{1'b1, `STEP2, `INSTRUCTION_LD_XN},
+				{1'b1, `STEP2, `INSTRUCTION_LDS},
+				{1'b1, `STEP1, `INSTRUCTION_IN},
+				{1'b1, `STEP0, `INSTRUCTION_CBI_SBI},
+				{1'b1, `STEP0, `INSTRUCTION_SBIC_SBIS},
+				{1'b1, `STEP1, `INSTRUCTION_SBIC_SBIS}: data_read_int <= 1'b1;
+			endcase
+/* Set "state_cnt" */ /*************************************************************/
+			casex({execute, state_cnt, CORE_TYPE, pgm_data_registered})
+				{1'b1, `STEP0, `INSTRUCTION_JMP},
+				{1'b1, `STEP0, `INSTRUCTION_IJMP},
+				{1'b1, `STEP0, `INSTRUCTION_RCALL},
+				{1'b1, `STEP0, `INSTRUCTION_CALL},
+				{1'b1, `STEP0, `INSTRUCTION_ICALL},
+				{1'b1, `STEP0, `INSTRUCTION_PUSH},
+				{1'b1, `STEP0, `INSTRUCTION_RET},
+				{1'b1, `STEP0, `INSTRUCTION_RETI},
+				{1'b1, `STEP0, `INSTRUCTION_POP},
+				{1'b1, `STEP0, `INSTRUCTION_CPSE},
+				{1'b1, `STEP0, `INSTRUCTION_SBRC_SBRS},
+				{1'b1, `STEP0, `INSTRUCTION_LDS},
+				{1'b1, `STEP0, `INSTRUCTION_LDS16},
+				{1'b1, `STEP0, `INSTRUCTION_STS},
+				{1'b1, `STEP0, `INSTRUCTION_LDD},
+				{1'b1, `STEP0, `INSTRUCTION_STD},
+				{1'b1, `STEP0, `INSTRUCTION_LD_YZP},
+				{1'b1, `STEP0, `INSTRUCTION_ST_YZP},
+				{1'b1, `STEP0, `INSTRUCTION_LD_YZN},
+				{1'b1, `STEP0, `INSTRUCTION_ST_YZN},
+				{1'b1, `STEP0, `INSTRUCTION_LD_X},
+				{1'b1, `STEP0, `INSTRUCTION_ST_X},
+				{1'b1, `STEP0, `INSTRUCTION_LD_XP},
+				{1'b1, `STEP0, `INSTRUCTION_ST_XP},
+				{1'b1, `STEP0, `INSTRUCTION_LD_XN},
+				{1'b1, `STEP0, `INSTRUCTION_ST_XN},
+				{1'b1, `STEP0, `INSTRUCTION_OUT},
+				{1'b1, `STEP0, `INSTRUCTION_IN},
+				{1'b1, `STEP0, `INSTRUCTION_CBI_SBI},
+				{1'b1, `STEP0, `INSTRUCTION_SBIC_SBIS},
+				{1'b1, `STEP0, `INSTRUCTION_LPM_R},
+				{1'b1, `STEP0, `INSTRUCTION_LPM_R_P},
+				{1'b1, `STEP0, `INSTRUCTION_LPM_ELPM}: state_cnt <= `STEP1;
+			endcase
+/*************************************************************/
+			casex({execute, state_cnt, CORE_TYPE, pgm_data_registered})
+				{1'b1, `STEP1, `INSTRUCTION_RET},
+				{1'b1, `STEP1, `INSTRUCTION_RETI}: state_cnt <= `STEP2;
+				{1'b1, `STEP1, `INSTRUCTION_CPSE}:
+				begin
+					if(reg_rs1 == reg_rs2)
+					begin
+						casex({CORE_TYPE, pgm_data_int})
+						`INSTRUCTION_LDS,
+						`INSTRUCTION_STS,
+						`INSTRUCTION_JMP,
+						`INSTRUCTION_CALL: state_cnt <= `STEP2;
+						endcase
+					end
+				end
+				{1'b1, `STEP1, `INSTRUCTION_SBRC_SBRS}:
+				begin
+					if(reg_rs1[pgm_data_registered[2:0]] == pgm_data_registered[9])
+					begin
+						casex({CORE_TYPE, pgm_data_int})
+						`INSTRUCTION_LDS,
+						`INSTRUCTION_STS,
+						`INSTRUCTION_JMP,
+						`INSTRUCTION_CALL: state_cnt <= `STEP2;
+						endcase
+					end
+				end
+				{1'b1, `STEP1, `INSTRUCTION_SBIC_SBIS}:
+				begin
+					if(data_in_int[pgm_data_registered[2:0]] == pgm_data_registered[9])
+					begin
+						casex({CORE_TYPE, pgm_data_int})
+						`INSTRUCTION_LDS,
+						`INSTRUCTION_STS,
+						`INSTRUCTION_JMP,
+						`INSTRUCTION_CALL: state_cnt <= `STEP2;
+						endcase
+					end
+				end
+				{1'b1, `STEP1, `INSTRUCTION_LDS},
+				{1'b1, `STEP1, `INSTRUCTION_LDD},
+				{1'b1, `STEP1, `INSTRUCTION_LD_YZP},
+				{1'b1, `STEP1, `INSTRUCTION_LD_YZN},
+				{1'b1, `STEP1, `INSTRUCTION_ST_YZN},
+				{1'b1, `STEP1, `INSTRUCTION_LD_X},
+				{1'b1, `STEP1, `INSTRUCTION_LD_XP},
+				{1'b1, `STEP1, `INSTRUCTION_LD_XN},
+				{1'b1, `STEP1, `INSTRUCTION_ST_XN},
+				{1'b1, `STEP1, `INSTRUCTION_LPM_R},
+				{1'b1, `STEP1, `INSTRUCTION_LPM_R_P},
+				{1'b1, `STEP1, `INSTRUCTION_LPM_ELPM}: state_cnt <= `STEP2;
+			endcase
+/*************************************************************/
+			casex({execute, state_cnt, CORE_TYPE, pgm_data_registered})
+				{1'b1, `STEP2, `INSTRUCTION_RET},
+				{1'b1, `STEP2, `INSTRUCTION_RETI},
+				{1'b1, `STEP2, `INSTRUCTION_CPSE},
+				{1'b1, `STEP2, `INSTRUCTION_SBRC_SBRS},
+				{1'b1, `STEP2, `INSTRUCTION_SBIC_SBIS}: state_cnt <= `STEP3;
+			endcase
+/* Set "PC_TMP_H" */ /*************************************************************/
+			casex({execute, state_cnt, CORE_TYPE, pgm_data_registered})
+				{1'b1, `STEP0, `INSTRUCTION_CALL}: 
+				begin
+					//PC_TMP_H <= PC_PLUS_ONE[ROM_ADDR_WIDTH - 1:8];
+					if(int_registered)
+						PC_TMP_H_CALL <= PC[ROM_ADDR_WIDTH - 1:8];
+				end
+				//{1'b1, `STEP0, `INSTRUCTION_ICALL}: PC_TMP_H <= PC[ROM_ADDR_WIDTH - 1:8];
+				//{1'b1, `STEP2, `INSTRUCTION_RET},
+				//{1'b1, `STEP2, `INSTRUCTION_RETI}: PC_TMP_H <= data_in_int;
+			endcase
+/* Set "PC" */ /*************************************************************/
+			casex({execute, state_cnt, CORE_TYPE, pgm_data_registered})
+				{1'b1, `STEP0, `INSTRUCTION_RJMP}: PC <= PC + {{ROM_ADDR_WIDTH - 11{pgm_data_registered[11]}}, pgm_data_registered[10:0]};
+				{1'b1, `STEP0, `INSTRUCTION_COND_BRANCH}: /***********************/
+				begin
+					if(sreg_out[pgm_data_registered[2:0]] == ~pgm_data_registered[10])
+						PC <= PC + {{ROM_ADDR_WIDTH - 6{pgm_data_registered[9]}}, pgm_data_registered[8:3]};
+				end
+				{1'b1, `STEP1, `INSTRUCTION_JMP}: PC <= {pgm_data_registered[8:4], pgm_data_registered[0], pgm_data_int};
+				{1'b1, `STEP1, `INSTRUCTION_IJMP}: PC <= reg_rs1;
+				{1'b1, `STEP0, `INSTRUCTION_RCALL}:  PC <= PC;
+				{1'b1, `STEP1, `INSTRUCTION_RCALL}: PC <= PC + {{ROM_ADDR_WIDTH - 11{pgm_data_registered[11]}}, pgm_data_registered[10:0]};
+				{1'b1, `STEP1, `INSTRUCTION_CALL}: PC <= {pgm_data_registered[8:4], pgm_data_registered[0], pgm_data_int};
+				{1'b1, `STEP1, `INSTRUCTION_ICALL}: PC <= reg_rs1;
+				{1'b1, `STEP0, `INSTRUCTION_PUSH},
 				{1'b1, `STEP0, `INSTRUCTION_RET},
 				{1'b1, `STEP0, `INSTRUCTION_RETI},
 				{1'b1, `STEP1, `INSTRUCTION_RET},
 				{1'b1, `STEP1, `INSTRUCTION_RETI},
-				{1'b1, `STEP0, `INSTRUCTION_POP}: SP <= SP_PLUS_ONE;
-				{1'b1, `STEP1, `INSTRUCTION_STS}:
-				begin
-					case(pgm_data_int)
-						24'h005D: SP[7:0] <= reg_rs1;
-						24'h005E:
-						begin
-							if(RAM_ADDR_WIDTH > 8)
-								SP[RAM_ADDR_WIDTH - 1:8] <= reg_rs1;
-						end
-					endcase
-				end
-				{1'b1, `STEP1, `INSTRUCTION_OUT}:
-				begin
-					case({pgm_data_registered[10:9],pgm_data_registered[3:0]})
-						6'h3D: SP[7:0] <= reg_rs1;
-						6'h3E: 
-						begin
-							if(RAM_ADDR_WIDTH > 8)
-								SP[RAM_ADDR_WIDTH - 1:8] <= reg_rs1;
-						end
-					endcase
-				end
-				endcase
-	/* Set "rs1a" */ /*************************************************************/
-				casex({execute, state_cnt, CORE_TYPE, pgm_data_registered})
-					{1'b1, `STEP0, `INSTRUCTION_MULS}: rs1a[4] <= 1'b1;
-					{1'b1, `STEP0, `INSTRUCTION_FMUL},
-					{1'b1, `STEP0, `INSTRUCTION_FMULS},
-					{1'b1, `STEP0, `INSTRUCTION_MULSU},
-					{1'b1, `STEP0, `INSTRUCTION_FMULSU}: rs1a[4:3] <= 2'b10;
-					{1'b1, `STEP0, `INSTRUCTION_CPI}: rs1a[4] <= 1'b1;
-					{1'b1, `STEP0, `INSTRUCTION_SUBI},
-					{1'b1, `STEP0, `INSTRUCTION_SBCI},
-					{1'b1, `STEP0, `INSTRUCTION_ORI_SBR},
-					{1'b1, `STEP0, `INSTRUCTION_ANDI_CBR}: rs1a[4] <= 1'b1;
-					{1'b1, `STEP0, `INSTRUCTION_ADIW},
-					{1'b1, `STEP0, `INSTRUCTION_SBIW}: rs1a <= {2'b11, pgm_data_registered[5:4], 1'b0};
-					{1'b1, `STEP0, `INSTRUCTION_IJMP},
-					{1'b1, `STEP0, `INSTRUCTION_ICALL}: rs1a <= 5'b11110;
-				endcase
-	/* Set "reg_rs1m" */ /*************************************************************/
-				casex({execute, state_cnt, CORE_TYPE, pgm_data_registered})
-					{1'b1, `STEP0, `INSTRUCTION_ADIW},
-					{1'b1, `STEP0, `INSTRUCTION_SBIW},
-					{1'b1, `STEP0, `INSTRUCTION_IJMP},
-					{1'b1, `STEP0, `INSTRUCTION_ICALL}: reg_rs1m <= `REG_MODE_16_BIT;
-				endcase
-	/* Set "rs2a" */ /*************************************************************/
-				casex({execute, state_cnt, CORE_TYPE, pgm_data_registered})
-					{1'b1, `STEP0, `INSTRUCTION_MOVW}: rs2a <= {pgm_data_registered[3:0], 1'b0};
-					{1'b1, `STEP0, `INSTRUCTION_MULS}: rs2a[4] <= 1'b1;
-					{1'b1, `STEP0, `INSTRUCTION_FMUL},
-					{1'b1, `STEP0, `INSTRUCTION_FMULS},
-					{1'b1, `STEP0, `INSTRUCTION_MULSU},
-					{1'b1, `STEP0, `INSTRUCTION_FMULSU}: rs2a[4:3] <= 2'b10;
-					{1'b1, `STEP0, `INSTRUCTION_LDD},
-					{1'b1, `STEP0, `INSTRUCTION_STD},
-					{1'b1, `STEP0, `INSTRUCTION_LD_YZP},
-					{1'b1, `STEP1, `INSTRUCTION_LD_YZP},
-					{1'b1, `STEP0, `INSTRUCTION_ST_YZP},
-					{1'b1, `STEP1, `INSTRUCTION_ST_YZP},
-					{1'b1, `STEP0, `INSTRUCTION_LD_YZN},
-					{1'b1, `STEP1, `INSTRUCTION_LD_YZN},
-					{1'b1, `STEP0, `INSTRUCTION_ST_YZN},
-					{1'b1, `STEP1, `INSTRUCTION_ST_YZN}: rs2a <= {3'b111, ~pgm_data_registered[3], 1'b0};
-					{1'b1, `STEP0, `INSTRUCTION_LD_X},
-					{1'b1, `STEP1, `INSTRUCTION_LD_X},
-					{1'b1, `STEP0, `INSTRUCTION_ST_X},
-					{1'b1, `STEP1, `INSTRUCTION_ST_X},
-					{1'b1, `STEP0, `INSTRUCTION_LD_XP},
-					{1'b1, `STEP1, `INSTRUCTION_LD_XP},
-					{1'b1, `STEP0, `INSTRUCTION_ST_XP},
-					{1'b1, `STEP1, `INSTRUCTION_ST_XP},
-					{1'b1, `STEP0, `INSTRUCTION_LD_XN},
-					{1'b1, `STEP1, `INSTRUCTION_LD_XN},
-					{1'b1, `STEP0, `INSTRUCTION_ST_XN},
-					{1'b1, `STEP1, `INSTRUCTION_ST_XN}: rs2a <= 5'b11010;
-					{1'b1, `STEP0, `INSTRUCTION_LPM_R},
-					{1'b1, `STEP1, `INSTRUCTION_LPM_R},
-					{1'b1, `STEP0, `INSTRUCTION_LPM_R_P},
-					{1'b1, `STEP1, `INSTRUCTION_LPM_R_P},
-					{1'b1, `STEP0, `INSTRUCTION_LPM_ELPM},
-					{1'b1, `STEP1, `INSTRUCTION_LPM_ELPM}: rs2a <= 5'b11110;
-				endcase
-	/* Set "reg_rs2m" */ /*************************************************************/
-				casex({execute, state_cnt, CORE_TYPE, pgm_data_registered})
-					{1'b1, `STEP0, `INSTRUCTION_MOVW},
-					{1'b1, `STEP0, `INSTRUCTION_LDD},
-					{1'b1, `STEP0, `INSTRUCTION_STD},
-					{1'b1, `STEP0, `INSTRUCTION_LD_YZP},
-					{1'b1, `STEP1, `INSTRUCTION_LD_YZP},
-					{1'b1, `STEP0, `INSTRUCTION_ST_YZP},
-					{1'b1, `STEP1, `INSTRUCTION_ST_YZP},
-					{1'b1, `STEP0, `INSTRUCTION_LD_YZN},
-					{1'b1, `STEP1, `INSTRUCTION_LD_YZN},
-					{1'b1, `STEP0, `INSTRUCTION_ST_YZN},
-					{1'b1, `STEP1, `INSTRUCTION_ST_YZN},
-					{1'b1, `STEP0, `INSTRUCTION_LD_X},
-					{1'b1, `STEP1, `INSTRUCTION_LD_X},
-					{1'b1, `STEP0, `INSTRUCTION_ST_X},
-					{1'b1, `STEP1, `INSTRUCTION_ST_X},
-					{1'b1, `STEP0, `INSTRUCTION_LD_XP},
-					{1'b1, `STEP1, `INSTRUCTION_LD_XP},
-					{1'b1, `STEP0, `INSTRUCTION_ST_XP},
-					{1'b1, `STEP1, `INSTRUCTION_ST_XP},
-					{1'b1, `STEP0, `INSTRUCTION_LD_XN},
-					{1'b1, `STEP1, `INSTRUCTION_LD_XN},
-					{1'b1, `STEP0, `INSTRUCTION_ST_XN},
-					{1'b1, `STEP1, `INSTRUCTION_ST_XN},
-					{1'b1, `STEP0, `INSTRUCTION_LPM_R},
-					{1'b1, `STEP1, `INSTRUCTION_LPM_R},
-					{1'b1, `STEP0, `INSTRUCTION_LPM_R_P},
-					{1'b1, `STEP1, `INSTRUCTION_LPM_R_P},
-					{1'b1, `STEP0, `INSTRUCTION_LPM_ELPM},
-					{1'b1, `STEP1, `INSTRUCTION_LPM_ELPM}: reg_rs2m <= `REG_MODE_16_BIT;
-				endcase
-	/* Set "skip_next_clock" */ /*************************************************************/
-				casex({execute, state_cnt, CORE_TYPE, pgm_data_registered})
-					{1'b1, `STEP0, `INSTRUCTION_COND_BRANCH}: /***********************/
-					begin
-						if(sreg_out[pgm_data_registered[2:0]] == ~pgm_data_registered[10])
-							skip_next_clock <= 1'b1;
-					end
-					{1'b1, `STEP1, `INSTRUCTION_CPSE}:
-					begin
-						if(reg_rs1 == reg_rs2)
-						begin
-							casex({CORE_TYPE, pgm_data_int})
-								`INSTRUCTION_LDS,
-								`INSTRUCTION_STS,
-								`INSTRUCTION_JMP,
-								`INSTRUCTION_CALL: ;
-								default: skip_next_clock <= 1'b1;
-							endcase
-						end
-					end
-					{1'b1, `STEP1, `INSTRUCTION_SBRC_SBRS}:
-					begin
-						if(reg_rs1[pgm_data_registered[2:0]] == pgm_data_registered[9])
-						begin
-							casex({CORE_TYPE, pgm_data_int})
-								`INSTRUCTION_LDS,
-								`INSTRUCTION_STS,
-								`INSTRUCTION_JMP,
-								`INSTRUCTION_CALL: ;
-								default: skip_next_clock <= 1'b1;
-							endcase
-						end
-					end
-					{1'b1, `STEP1, `INSTRUCTION_SBIC_SBIS}:
-					begin
-						if(data_in_int[pgm_data_registered[2:0]] == pgm_data_registered[9])
-						begin
-							casex({CORE_TYPE, pgm_data_int})
-								`INSTRUCTION_LDS,
-								`INSTRUCTION_STS,
-								`INSTRUCTION_JMP,
-								`INSTRUCTION_CALL: ;
-								default: skip_next_clock <= 1'b1;
-							endcase
-						end
-					end
-					{1'b1, `STEP0, `INSTRUCTION_RJMP},
-					{1'b1, `STEP1, `INSTRUCTION_JMP},
-					{1'b1, `STEP1, `INSTRUCTION_IJMP},
-					{1'b1, `STEP1, `INSTRUCTION_RCALL},
-					{1'b1, `STEP1, `INSTRUCTION_CALL},
-					{1'b1, `STEP1, `INSTRUCTION_ICALL},
-					{1'b1, `STEP3, `INSTRUCTION_RET},
-					{1'b1, `STEP3, `INSTRUCTION_RETI}: skip_next_clock <= 1'b1;
-				endcase
-	/* Set "rda" */ /*************************************************************/
-				casex({execute, state_cnt, CORE_TYPE, pgm_data_registered})
-					{1'b1, `STEP0, `INSTRUCTION_MOVW}: rda <= {pgm_data_registered[7:4], 1'b0};
-					{1'b1, `STEP0, `INSTRUCTION_LDI}: rda[4] <= 1'b1;
-					{1'b1, `STEP0, `INSTRUCTION_MUL},
-					{1'b1, `STEP0, `INSTRUCTION_MULS},
-					{1'b1, `STEP0, `INSTRUCTION_FMUL},
-					{1'b1, `STEP0, `INSTRUCTION_FMULS},
-					{1'b1, `STEP0, `INSTRUCTION_MULSU},
-					{1'b1, `STEP0, `INSTRUCTION_FMULSU},
-					{1'b1, `STEP1, `INSTRUCTION_LPM_ELPM}: rda <= 5'h00;
-					{1'b1, `STEP0, `INSTRUCTION_SUBI},
-					{1'b1, `STEP0, `INSTRUCTION_SBCI},
-					{1'b1, `STEP0, `INSTRUCTION_ORI_SBR},
-					{1'b1, `STEP0, `INSTRUCTION_ANDI_CBR}: rda[4] <= 1'b1;
-					{1'b1, `STEP0, `INSTRUCTION_ADIW},
-					{1'b1, `STEP0, `INSTRUCTION_SBIW}: rda <= {2'b11, pgm_data_registered[5:4], 1'b0};
-					{1'b1, `STEP1, `INSTRUCTION_LD_YZP},
-					{1'b1, `STEP0, `INSTRUCTION_ST_YZP},
-					{1'b1, `STEP1, `INSTRUCTION_LD_YZN},
-					{1'b1, `STEP1, `INSTRUCTION_ST_YZN}: rda <= {3'b111, ~pgm_data_registered[3], 1'b0};
-					{1'b1, `STEP1, `INSTRUCTION_LD_XP},
-					{1'b1, `STEP0, `INSTRUCTION_ST_XP},
-					{1'b1, `STEP1, `INSTRUCTION_LD_XN},
-					{1'b1, `STEP1, `INSTRUCTION_ST_XN}: rda <= 5'b11010;
-					{1'b1, `STEP0, `INSTRUCTION_LPM_R_P}: rda <= 5'b11110;
-				endcase
-	/* Set "reg_rdm" */ /*************************************************************/
-				casex({execute, state_cnt, CORE_TYPE, pgm_data_registered})
-					{1'b1, `STEP0, `INSTRUCTION_MOVW},
-					{1'b1, `STEP0, `INSTRUCTION_MUL},
-					{1'b1, `STEP0, `INSTRUCTION_MULS},
-					{1'b1, `STEP0, `INSTRUCTION_FMUL},
-					{1'b1, `STEP0, `INSTRUCTION_FMULS},
-					{1'b1, `STEP0, `INSTRUCTION_MULSU},
-					{1'b1, `STEP0, `INSTRUCTION_FMULSU},
-					{1'b1, `STEP0, `INSTRUCTION_ADIW},
-					{1'b1, `STEP0, `INSTRUCTION_SBIW},
-					{1'b1, `STEP1, `INSTRUCTION_LD_YZP},
-					{1'b1, `STEP0, `INSTRUCTION_ST_YZP},
-					{1'b1, `STEP1, `INSTRUCTION_LD_YZN},
-					{1'b1, `STEP1, `INSTRUCTION_ST_YZN},
-					{1'b1, `STEP1, `INSTRUCTION_LD_XP},
-					{1'b1, `STEP0, `INSTRUCTION_ST_XP},
-					{1'b1, `STEP1, `INSTRUCTION_LD_XN},
-					{1'b1, `STEP1, `INSTRUCTION_ST_XN},
-					{1'b1, `STEP0, `INSTRUCTION_LPM_R_P}: reg_rdm <= `REG_MODE_16_BIT;
-				endcase
-	/* Set "reg_rdw" */ /*************************************************************/
-				casex({execute, state_cnt, CORE_TYPE, pgm_data_registered})
-					{1'b1, `STEP0, `INSTRUCTION_LDI},
-					{1'b1, `STEP0, `INSTRUCTION_MOVW},
-					{1'b1, `STEP0, `INSTRUCTION_MUL},
-					{1'b1, `STEP0, `INSTRUCTION_MULS},
-					{1'b1, `STEP0, `INSTRUCTION_FMUL},
-					{1'b1, `STEP0, `INSTRUCTION_FMULS},
-					{1'b1, `STEP0, `INSTRUCTION_MULSU},
-					{1'b1, `STEP0, `INSTRUCTION_FMULSU},
-					{1'b1, `STEP0, `INSTRUCTION_INC},
-					{1'b1, `STEP0, `INSTRUCTION_DEC},
-					{1'b1, `STEP0, `INSTRUCTION_ASR},
-					{1'b1, `STEP0, `INSTRUCTION_LSR},
-					{1'b1, `STEP0, `INSTRUCTION_ROR},
-					{1'b1, `STEP0, `INSTRUCTION_SUB},
-					{1'b1, `STEP0, `INSTRUCTION_SBC},
-					{1'b1, `STEP0, `INSTRUCTION_ADD},
-					{1'b1, `STEP0, `INSTRUCTION_ADC},
-					{1'b1, `STEP0, `INSTRUCTION_SWAP},
-					{1'b1, `STEP0, `INSTRUCTION_AND},
-					{1'b1, `STEP0, `INSTRUCTION_EOR},
-					{1'b1, `STEP0, `INSTRUCTION_OR},
-					{1'b1, `STEP0, `INSTRUCTION_MOV},
-					{1'b1, `STEP0, `INSTRUCTION_BLD},
-					{1'b1, `STEP0, `INSTRUCTION_SUBI},
-					{1'b1, `STEP0, `INSTRUCTION_SBCI},
-					{1'b1, `STEP0, `INSTRUCTION_ORI_SBR},
-					{1'b1, `STEP0, `INSTRUCTION_ANDI_CBR},
-					{1'b1, `STEP0, `INSTRUCTION_COM},
-					{1'b1, `STEP0, `INSTRUCTION_NEG},
-					{1'b1, `STEP0, `INSTRUCTION_ADIW},
-					{1'b1, `STEP0, `INSTRUCTION_SBIW},
-					{1'b1, `STEP1, `INSTRUCTION_POP},
-					{1'b1, `STEP2, `INSTRUCTION_LDS},
-					{1'b1, `STEP1, `INSTRUCTION_LDS16},
-					{1'b1, `STEP2, `INSTRUCTION_LDD},
-					{1'b1, `STEP1, `INSTRUCTION_LD_YZP},
-					{1'b1, `STEP2, `INSTRUCTION_LD_YZP},
-					{1'b1, `STEP0, `INSTRUCTION_ST_YZP},
-					{1'b1, `STEP1, `INSTRUCTION_LD_YZN},
-					{1'b1, `STEP2, `INSTRUCTION_LD_YZN},
-					{1'b1, `STEP1, `INSTRUCTION_ST_YZN},
-					{1'b1, `STEP2, `INSTRUCTION_LD_X},
-					{1'b1, `STEP1, `INSTRUCTION_LD_XP},
-					{1'b1, `STEP2, `INSTRUCTION_LD_XP},
-					{1'b1, `STEP0, `INSTRUCTION_ST_XP},
-					{1'b1, `STEP1, `INSTRUCTION_LD_XN},
-					{1'b1, `STEP2, `INSTRUCTION_LD_XN},
-					{1'b1, `STEP1, `INSTRUCTION_ST_XN},
-					{1'b1, `STEP1, `INSTRUCTION_IN},
-					{1'b1, `STEP1, `INSTRUCTION_LPM_R},
-					{1'b1, `STEP0, `INSTRUCTION_LPM_R_P},
-					{1'b1, `STEP1, `INSTRUCTION_LPM_R_P},
-					{1'b1, `STEP1, `INSTRUCTION_LPM_ELPM}: reg_rdw <= 1'b1;
-				endcase
-	/* Set "data_addr" */ /*************************************************************/
-				casex({execute, state_cnt, CORE_TYPE, pgm_data_registered})
-					{1'b1, `STEP0, `INSTRUCTION_RCALL},
-					{1'b1, `STEP1, `INSTRUCTION_RCALL},
-					{1'b1, `STEP0, `INSTRUCTION_CALL},
-					{1'b1, `STEP1, `INSTRUCTION_CALL},
-					{1'b1, `STEP0, `INSTRUCTION_ICALL},
-					{1'b1, `STEP1, `INSTRUCTION_ICALL},
-					{1'b1, `STEP1, `INSTRUCTION_PUSH}: data_addr_int <= SP;
-					{1'b1, `STEP0, `INSTRUCTION_RET},
-					{1'b1, `STEP0, `INSTRUCTION_RETI},
-					{1'b1, `STEP1, `INSTRUCTION_RET},
-					{1'b1, `STEP1, `INSTRUCTION_RETI}: data_addr_int <= SP_PLUS_ONE;
-					{1'b1, `STEP2, `INSTRUCTION_RET},
-					{1'b1, `STEP2, `INSTRUCTION_RETI}: data_addr_int <= SP;
-					{1'b1, `STEP0, `INSTRUCTION_POP}: data_addr_int <= SP_PLUS_ONE;
-					{1'b1, `STEP1, `INSTRUCTION_POP}: data_addr_int <= SP;
-					{1'b1, `STEP1, `INSTRUCTION_LDS}: 
-					begin
-						if(ROM_ADDR_WIDTH > 16) 
-							data_addr_int <= {RAMPD, pgm_data_int};
-						else
-							data_addr_int <= pgm_data_int;
-					end
-					{1'b1, `STEP2, `INSTRUCTION_LDS}: data_addr_int <= data_addr_int;
-					{1'b1, `STEP0, `INSTRUCTION_LDS16}: data_addr_int <= {pgm_data_registered[10:8], pgm_data_registered[3:0]};
-					{1'b1, `STEP1, `INSTRUCTION_LDS16}: data_addr_int <= data_addr_int;
-					{1'b1, `STEP1, `INSTRUCTION_STS}: 
-					begin
-						if(ROM_ADDR_WIDTH > 16) 
-							data_addr_int <= {RAMPD, pgm_data_int};
-						else
-							data_addr_int <= pgm_data_int;
-					end
-					{1'b1, `STEP0, `INSTRUCTION_STS16}: data_addr_int <= {pgm_data_registered[10:8], pgm_data_registered[3:0]};
-					{1'b1, `STEP1, `INSTRUCTION_LDD}:  
-					begin
-						if(ROM_ADDR_WIDTH > 16) 
-							data_addr_int <= {pgm_data_registered[3] ? RAMPY : RAMPZ, reg_rs2} + {pgm_data_registered[13], pgm_data_registered[11:10], pgm_data_registered[2:0]};
-						else
-							data_addr_int <= reg_rs2 + {pgm_data_registered[13], pgm_data_registered[11:10], pgm_data_registered[2:0]};
-					end
-					{1'b1, `STEP2, `INSTRUCTION_LDD}: data_addr_int <= data_addr_int;
-					{1'b1, `STEP1, `INSTRUCTION_STD}: 
-					begin
-						if(ROM_ADDR_WIDTH > 16) 
-							data_addr_int <= {pgm_data_registered[3] ? RAMPY : RAMPZ, reg_rs2} + {pgm_data_registered[13], pgm_data_registered[11:10], pgm_data_registered[2:0]};
-						else
-							data_addr_int <= reg_rs2 + {pgm_data_registered[13], pgm_data_registered[11:10], pgm_data_registered[2:0]};
-					end
-					{1'b1, `STEP1, `INSTRUCTION_LD_YZP}: 
-					begin
-						if(ROM_ADDR_WIDTH > 16) 
-							data_addr_int <= {pgm_data_registered[3] ? RAMPY : RAMPZ, reg_rs2};
-						else
-							data_addr_int <= reg_rs2;
-					end
-					{1'b1, `STEP2, `INSTRUCTION_LD_YZP}: data_addr_int <= data_addr_int;
-					{1'b1, `STEP1, `INSTRUCTION_ST_YZP}: 
-					begin
-						if(ROM_ADDR_WIDTH > 16) 
-							data_addr_int <= {pgm_data_registered[3] ? RAMPY : RAMPZ, reg_rs2};
-						else
-							data_addr_int <= reg_rs2;
-					end
-					{1'b1, `STEP1, `INSTRUCTION_LD_YZN}: 
-					begin
-						if(ROM_ADDR_WIDTH > 16) 
-							data_addr_int <= {pgm_data_registered[3] ? RAMPY : RAMPZ, reg_rs2} - 1;
-						else
-							data_addr_int <= reg_rs2 - 1;
-					end
-					{1'b1, `STEP2, `INSTRUCTION_LD_YZN}: data_addr_int <= data_addr_int;
-					{1'b1, `STEP1, `INSTRUCTION_ST_YZN}: 
-					begin
-						if(ROM_ADDR_WIDTH > 16) 
-							data_addr_int <= {pgm_data_registered[3] ? RAMPY : RAMPZ, reg_rs2} - 1;
-						else
-							data_addr_int <= reg_rs2 - 1;
-					end
-					{1'b1, `STEP2, `INSTRUCTION_ST_YZN}: data_addr_int <= data_addr_int;
-					{1'b1, `STEP1, `INSTRUCTION_LD_X}: 
-					begin
-						if(ROM_ADDR_WIDTH > 16) 
-							data_addr_int <= {RAMPX, reg_rs2};
-						else
-							data_addr_int <= reg_rs2;
-					end
-					{1'b1, `STEP2, `INSTRUCTION_LD_X}: data_addr_int <= data_addr_int;
-					{1'b1, `STEP1, `INSTRUCTION_ST_X}: 
-					begin
-						if(ROM_ADDR_WIDTH > 16) 
-							data_addr_int <= {RAMPX, reg_rs2};
-						else
-							data_addr_int <= reg_rs2;
-					end
-					{1'b1, `STEP1, `INSTRUCTION_LD_XP}: 
-					begin
-						if(ROM_ADDR_WIDTH > 16) 
-							data_addr_int <= {RAMPX, reg_rs2};
-						else
-							data_addr_int <= reg_rs2;
-					end
-					{1'b1, `STEP2, `INSTRUCTION_LD_XP}: data_addr_int <= data_addr_int;
-					{1'b1, `STEP1, `INSTRUCTION_ST_XP}: 
-					begin
-						if(ROM_ADDR_WIDTH > 16) 
-							data_addr_int <= {RAMPX, reg_rs2};
-						else
-							data_addr_int <= reg_rs2;
-					end
-					{1'b1, `STEP1, `INSTRUCTION_LD_XN}: 
-					begin
-						if(ROM_ADDR_WIDTH > 16) 
-							data_addr_int <= {RAMPX, reg_rs2} - 1;
-						else
-							data_addr_int <= reg_rs2 - 1;
-					end
-					{1'b1, `STEP2, `INSTRUCTION_LD_XN}: data_addr_int <= data_addr_int;
-					{1'b1, `STEP1, `INSTRUCTION_ST_XN}: 
-					begin
-						if(ROM_ADDR_WIDTH > 16) 
-							data_addr_int <= {RAMPX, reg_rs2} - 1;
-						else
-							data_addr_int <= reg_rs2 - 1;
-					end
-					{1'b1, `STEP2, `INSTRUCTION_ST_XN}: data_addr_int <= data_addr_int;
-					{1'b1, `STEP1, `INSTRUCTION_OUT},
-					{1'b1, `STEP0, `INSTRUCTION_IN},
-					{1'b1, `STEP1, `INSTRUCTION_IN}: data_addr_int <= {pgm_data_registered[10:9],pgm_data_registered[3:0]} + 'h20;
-					{1'b1, `STEP0, `INSTRUCTION_CBI_SBI},
-					{1'b1, `STEP1, `INSTRUCTION_CBI_SBI},
-					{1'b1, `STEP0, `INSTRUCTION_SBIC_SBIS},
-					{1'b1, `STEP1, `INSTRUCTION_SBIC_SBIS}: data_addr_int <= pgm_data_registered[7:3] + 'h20;
-				endcase
-	/* Set "data_out" */ /*************************************************************/
-				casex({execute, state_cnt, CORE_TYPE, pgm_data_registered})
-					{1'b1, `STEP0, `INSTRUCTION_RCALL}: data_out_int <= PC;
-					{1'b1, `STEP1, `INSTRUCTION_RCALL}: data_out_int <= PC[ROM_ADDR_WIDTH - 1:8];
-					{1'b1, `STEP0, `INSTRUCTION_CALL}: 
-					begin
-						data_out_int <= PC_PLUS_ONE[7:0];
-						if(int_registered)
-							data_out_int <= PC_SNAPSHOOT;
-					end
-					{1'b1, `STEP1, `INSTRUCTION_CALL}: data_out_int <= PC_TMP_H;
-					{1'b1, `STEP0, `INSTRUCTION_ICALL}: data_out_int <= PC[7:0];
-					{1'b1, `STEP1, `INSTRUCTION_ICALL}: data_out_int <= PC_TMP_H;
-					{1'b1, `STEP1, `INSTRUCTION_PUSH},
-					{1'b1, `STEP1, `INSTRUCTION_STS},
-					{1'b1, `STEP0, `INSTRUCTION_STS16},
-					{1'b1, `STEP1, `INSTRUCTION_STD},
-					{1'b1, `STEP1, `INSTRUCTION_ST_YZP},
-					{1'b1, `STEP2, `INSTRUCTION_ST_YZN},
-					{1'b1, `STEP1, `INSTRUCTION_ST_X},
-					{1'b1, `STEP1, `INSTRUCTION_ST_XP},
-					{1'b1, `STEP2, `INSTRUCTION_ST_XN}: data_out_int <= reg_rs1;
-					{1'b1, `STEP1, `INSTRUCTION_OUT}: data_out_int = reg_rs1;
-					{1'b1, `STEP1, `INSTRUCTION_CBI_SBI}:
-					begin
-						if(pgm_data_registered[9])
-							data_out_int = data_in | (2 ** pgm_data_registered[2:0]);
-						else
-							data_out_int = data_in & ~(2 ** pgm_data_registered[2:0]);
-					end
-				endcase
-	/* Set "data_write" */ /*************************************************************/
-				casex({execute, state_cnt, CORE_TYPE, pgm_data_registered})
-					{1'b1, `STEP0, `INSTRUCTION_RCALL},
-					{1'b1, `STEP1, `INSTRUCTION_RCALL},
-					{1'b1, `STEP0, `INSTRUCTION_CALL},
-					{1'b1, `STEP1, `INSTRUCTION_CALL},
-					{1'b1, `STEP0, `INSTRUCTION_ICALL},
-					{1'b1, `STEP1, `INSTRUCTION_ICALL},
-					{1'b1, `STEP1, `INSTRUCTION_PUSH},
-					{1'b1, `STEP0, `INSTRUCTION_STS16},
-					{1'b1, `STEP1, `INSTRUCTION_STD},
-					{1'b1, `STEP1, `INSTRUCTION_ST_YZP},
-					{1'b1, `STEP2, `INSTRUCTION_ST_YZN},
-					{1'b1, `STEP1, `INSTRUCTION_ST_X},
-					{1'b1, `STEP1, `INSTRUCTION_ST_XP},
-					{1'b1, `STEP2, `INSTRUCTION_ST_XN},
-					{1'b1, `STEP1, `INSTRUCTION_STS},
-					{1'b1, `STEP1, `INSTRUCTION_OUT},
-					{1'b1, `STEP1, `INSTRUCTION_CBI_SBI}: data_write_int <= 1'b1;
-				endcase
-	/* Set "data_read" */ /*************************************************************/
-				casex({execute, state_cnt, CORE_TYPE, pgm_data_registered})
-					{1'b1, `STEP1, `INSTRUCTION_RET},
-					{1'b1, `STEP1, `INSTRUCTION_RETI},
-					{1'b1, `STEP2, `INSTRUCTION_RET},
-					{1'b1, `STEP2, `INSTRUCTION_RETI},
-					{1'b1, `STEP1, `INSTRUCTION_POP},
-					{1'b1, `STEP1, `INSTRUCTION_LDS16},
-					{1'b1, `STEP2, `INSTRUCTION_LDD},
-					{1'b1, `STEP2, `INSTRUCTION_LD_YZP},
-					{1'b1, `STEP2, `INSTRUCTION_LD_YZN},
-					{1'b1, `STEP2, `INSTRUCTION_LD_X},
-					{1'b1, `STEP2, `INSTRUCTION_LD_XP},
-					{1'b1, `STEP2, `INSTRUCTION_LD_XN},
-					{1'b1, `STEP2, `INSTRUCTION_LDS},
-					{1'b1, `STEP1, `INSTRUCTION_IN},
-					{1'b1, `STEP0, `INSTRUCTION_CBI_SBI},
-					{1'b1, `STEP0, `INSTRUCTION_SBIC_SBIS},
-					{1'b1, `STEP1, `INSTRUCTION_SBIC_SBIS}: data_read_int <= 1'b1;
-				endcase
-	/* Set "state_cnt" */ /*************************************************************/
-				casex({execute, state_cnt, CORE_TYPE, pgm_data_registered})
-					{1'b1, `STEP0, `INSTRUCTION_JMP},
-					{1'b1, `STEP0, `INSTRUCTION_IJMP},
-					{1'b1, `STEP0, `INSTRUCTION_RCALL},
-					{1'b1, `STEP0, `INSTRUCTION_CALL},
-					{1'b1, `STEP0, `INSTRUCTION_ICALL},
-					{1'b1, `STEP0, `INSTRUCTION_PUSH},
-					{1'b1, `STEP0, `INSTRUCTION_RET},
-					{1'b1, `STEP0, `INSTRUCTION_RETI},
-					{1'b1, `STEP0, `INSTRUCTION_POP},
-					{1'b1, `STEP0, `INSTRUCTION_CPSE},
-					{1'b1, `STEP0, `INSTRUCTION_SBRC_SBRS},
-					{1'b1, `STEP0, `INSTRUCTION_LDS},
-					{1'b1, `STEP0, `INSTRUCTION_LDS16},
-					{1'b1, `STEP0, `INSTRUCTION_STS},
-					{1'b1, `STEP0, `INSTRUCTION_LDD},
-					{1'b1, `STEP0, `INSTRUCTION_STD},
-					{1'b1, `STEP0, `INSTRUCTION_LD_YZP},
-					{1'b1, `STEP0, `INSTRUCTION_ST_YZP},
-					{1'b1, `STEP0, `INSTRUCTION_LD_YZN},
-					{1'b1, `STEP0, `INSTRUCTION_ST_YZN},
-					{1'b1, `STEP0, `INSTRUCTION_LD_X},
-					{1'b1, `STEP0, `INSTRUCTION_ST_X},
-					{1'b1, `STEP0, `INSTRUCTION_LD_XP},
-					{1'b1, `STEP0, `INSTRUCTION_ST_XP},
-					{1'b1, `STEP0, `INSTRUCTION_LD_XN},
-					{1'b1, `STEP0, `INSTRUCTION_ST_XN},
-					{1'b1, `STEP0, `INSTRUCTION_OUT},
-					{1'b1, `STEP0, `INSTRUCTION_IN},
-					{1'b1, `STEP0, `INSTRUCTION_CBI_SBI},
-					{1'b1, `STEP0, `INSTRUCTION_SBIC_SBIS},
-					{1'b1, `STEP0, `INSTRUCTION_LPM_R},
-					{1'b1, `STEP0, `INSTRUCTION_LPM_R_P},
-					{1'b1, `STEP0, `INSTRUCTION_LPM_ELPM}: state_cnt <= `STEP1;
-	/*************************************************************/
-					{1'b1, `STEP1, `INSTRUCTION_RET},
-					{1'b1, `STEP1, `INSTRUCTION_RETI}: state_cnt <= `STEP2;
-					{1'b1, `STEP1, `INSTRUCTION_CPSE}:
-					begin
-						if(reg_rs1 == reg_rs2)
-						begin
-							casex({CORE_TYPE, pgm_data_int})
-							`INSTRUCTION_LDS,
-							`INSTRUCTION_STS,
-							`INSTRUCTION_JMP,
-							`INSTRUCTION_CALL: state_cnt <= `STEP2;
-							endcase
-						end
-					end
-					{1'b1, `STEP1, `INSTRUCTION_SBRC_SBRS}:
-					begin
-						if(reg_rs1[pgm_data_registered[2:0]] == pgm_data_registered[9])
-						begin
-							casex({CORE_TYPE, pgm_data_int})
-							`INSTRUCTION_LDS,
-							`INSTRUCTION_STS,
-							`INSTRUCTION_JMP,
-							`INSTRUCTION_CALL: state_cnt <= `STEP2;
-							endcase
-						end
-					end
-					{1'b1, `STEP1, `INSTRUCTION_SBIC_SBIS}:
-					begin
-						if(data_in_int[pgm_data_registered[2:0]] == pgm_data_registered[9])
-						begin
-							casex({CORE_TYPE, pgm_data_int})
-							`INSTRUCTION_LDS,
-							`INSTRUCTION_STS,
-							`INSTRUCTION_JMP,
-							`INSTRUCTION_CALL: state_cnt <= `STEP2;
-							endcase
-						end
-					end
-					{1'b1, `STEP1, `INSTRUCTION_LDS},
-					{1'b1, `STEP1, `INSTRUCTION_LDD},
-					{1'b1, `STEP1, `INSTRUCTION_LD_YZP},
-					{1'b1, `STEP1, `INSTRUCTION_LD_YZN},
-					{1'b1, `STEP1, `INSTRUCTION_ST_YZN},
-					{1'b1, `STEP1, `INSTRUCTION_LD_X},
-					{1'b1, `STEP1, `INSTRUCTION_LD_XP},
-					{1'b1, `STEP1, `INSTRUCTION_LD_XN},
-					{1'b1, `STEP1, `INSTRUCTION_ST_XN},
-					{1'b1, `STEP1, `INSTRUCTION_LPM_R},
-					{1'b1, `STEP1, `INSTRUCTION_LPM_R_P},
-					{1'b1, `STEP1, `INSTRUCTION_LPM_ELPM}: state_cnt <= `STEP2;
-	/*************************************************************/
-					{1'b1, `STEP2, `INSTRUCTION_RET},
-					{1'b1, `STEP2, `INSTRUCTION_RETI},
-					{1'b1, `STEP2, `INSTRUCTION_CPSE},
-					{1'b1, `STEP2, `INSTRUCTION_SBRC_SBRS},
-					{1'b1, `STEP2, `INSTRUCTION_SBIC_SBIS}: state_cnt <= `STEP3;
-				endcase
-	/* Set "PC_TMP_H" */ /*************************************************************/
-				casex({execute, state_cnt, CORE_TYPE, pgm_data_registered})
-					{1'b1, `STEP0, `INSTRUCTION_CALL}: 
-					begin
-						PC_TMP_H <= PC_PLUS_ONE[ROM_ADDR_WIDTH - 1:8];
-						if(int_registered)
-							PC_TMP_H <= PC_SNAPSHOOT[ROM_ADDR_WIDTH - 1:8];
-					end
-					{1'b1, `STEP0, `INSTRUCTION_ICALL}: PC_TMP_H <= PC[ROM_ADDR_WIDTH - 1:8];
-					{1'b1, `STEP2, `INSTRUCTION_RET},
-					{1'b1, `STEP2, `INSTRUCTION_RETI}: PC_TMP_H <= data_in_int;
-				endcase
-	/* Set "PC" */ /*************************************************************/
-				casex({execute, state_cnt, CORE_TYPE, pgm_data_registered})
-					{1'b1, `STEP0, `INSTRUCTION_RJMP}: PC <= PC + {{ROM_ADDR_WIDTH - 11{pgm_data_registered[11]}}, pgm_data_registered[10:0]};
-					{1'b1, `STEP0, `INSTRUCTION_COND_BRANCH}: /***********************/
-					begin
-						if(sreg_out[pgm_data_registered[2:0]] == ~pgm_data_registered[10])
-							PC <= PC + {{ROM_ADDR_WIDTH - 6{pgm_data_registered[9]}}, pgm_data_registered[8:3]};
-					end
-					{1'b1, `STEP1, `INSTRUCTION_JMP}: PC <= {pgm_data_registered[8:4], pgm_data_registered[0], pgm_data_int};
-					{1'b1, `STEP1, `INSTRUCTION_IJMP}: PC <= reg_rs1;
-					{1'b1, `STEP0, `INSTRUCTION_RCALL}:  PC <= PC;
-					{1'b1, `STEP1, `INSTRUCTION_RCALL}: PC <= PC + {{ROM_ADDR_WIDTH - 11{pgm_data_registered[11]}}, pgm_data_registered[10:0]};
-					{1'b1, `STEP1, `INSTRUCTION_CALL}: PC <= {pgm_data_registered[8:4], pgm_data_registered[0], pgm_data_int};
-					{1'b1, `STEP1, `INSTRUCTION_ICALL}: PC <= reg_rs1;
-					{1'b1, `STEP0, `INSTRUCTION_PUSH},
-					{1'b1, `STEP0, `INSTRUCTION_RET},
-					{1'b1, `STEP0, `INSTRUCTION_RETI},
-					{1'b1, `STEP1, `INSTRUCTION_RET},
-					{1'b1, `STEP1, `INSTRUCTION_RETI},
-					{1'b1, `STEP2, `INSTRUCTION_RET},
-					{1'b1, `STEP2, `INSTRUCTION_RETI}: PC <= PC;
-					{1'b1, `STEP3, `INSTRUCTION_RET}: PC <= {PC_TMP_H, data_in_int};
-					{1'b1, `STEP3, `INSTRUCTION_RETI}: PC <= {PC_TMP_H, data_in_int} - 1;
-					{1'b1, `STEP0, `INSTRUCTION_CPSE},
-					{1'b1, `STEP0, `INSTRUCTION_SBRC_SBRS},
-					{1'b1, `STEP0, `INSTRUCTION_POP},
-					{1'b1, `STEP1, `INSTRUCTION_LDS},
-					{1'b1, `STEP0, `INSTRUCTION_LDS16},
-					{1'b1, `STEP0, `INSTRUCTION_LDD},
-					{1'b1, `STEP1, `INSTRUCTION_LDD},
-					{1'b1, `STEP0, `INSTRUCTION_STD},
-					{1'b1, `STEP0, `INSTRUCTION_LD_YZP},
-					{1'b1, `STEP1, `INSTRUCTION_LD_YZP},
-					{1'b1, `STEP0, `INSTRUCTION_ST_YZP},
-					{1'b1, `STEP0, `INSTRUCTION_LD_YZN},
-					{1'b1, `STEP1, `INSTRUCTION_LD_YZN},
-					{1'b1, `STEP0, `INSTRUCTION_ST_YZN},
-					{1'b1, `STEP1, `INSTRUCTION_ST_YZN},
-					{1'b1, `STEP0, `INSTRUCTION_LD_X},
-					{1'b1, `STEP1, `INSTRUCTION_LD_X},
-					{1'b1, `STEP0, `INSTRUCTION_ST_X},
-					{1'b1, `STEP0, `INSTRUCTION_LD_XP},
-					{1'b1, `STEP1, `INSTRUCTION_LD_XP},
-					{1'b1, `STEP0, `INSTRUCTION_ST_XP},
-					{1'b1, `STEP0, `INSTRUCTION_LD_XN},
-					{1'b1, `STEP1, `INSTRUCTION_LD_XN},
-					{1'b1, `STEP0, `INSTRUCTION_ST_XN},
-					{1'b1, `STEP1, `INSTRUCTION_ST_XN},
-					{1'b1, `STEP0, `INSTRUCTION_OUT},
-					{1'b1, `STEP0, `INSTRUCTION_IN},
-					{1'b1, `STEP0, `INSTRUCTION_CBI_SBI},
-					{1'b1, `STEP0, `INSTRUCTION_SBIC_SBIS},
-					{1'b1, `STEP0, `INSTRUCTION_LPM_R},
-					{1'b1, `STEP1, `INSTRUCTION_LPM_R},
-					{1'b1, `STEP0, `INSTRUCTION_LPM_R_P},
-					{1'b1, `STEP1, `INSTRUCTION_LPM_R_P},
-					{1'b1, `STEP0, `INSTRUCTION_LPM_ELPM},
-					{1'b1, `STEP1, `INSTRUCTION_LPM_ELPM}: PC <= PC;
-				endcase
-			end
+				{1'b1, `STEP2, `INSTRUCTION_RET},
+				{1'b1, `STEP2, `INSTRUCTION_RETI}: PC <= PC;
+				{1'b1, `STEP3, `INSTRUCTION_RET}: PC <= {PC_TMP_H_RET_I, data_in_int};
+				{1'b1, `STEP3, `INSTRUCTION_RETI}: PC <= {PC_TMP_H_RET_I, data_in_int} - 1;
+				{1'b1, `STEP0, `INSTRUCTION_CPSE},
+				{1'b1, `STEP0, `INSTRUCTION_SBRC_SBRS},
+				{1'b1, `STEP0, `INSTRUCTION_POP},
+				{1'b1, `STEP1, `INSTRUCTION_LDS},
+				{1'b1, `STEP0, `INSTRUCTION_LDS16},
+				{1'b1, `STEP0, `INSTRUCTION_LDD},
+				{1'b1, `STEP1, `INSTRUCTION_LDD},
+				{1'b1, `STEP0, `INSTRUCTION_STD},
+				{1'b1, `STEP0, `INSTRUCTION_LD_YZP},
+				{1'b1, `STEP1, `INSTRUCTION_LD_YZP},
+				{1'b1, `STEP0, `INSTRUCTION_ST_YZP},
+				{1'b1, `STEP0, `INSTRUCTION_LD_YZN},
+				{1'b1, `STEP1, `INSTRUCTION_LD_YZN},
+				{1'b1, `STEP0, `INSTRUCTION_ST_YZN},
+				{1'b1, `STEP1, `INSTRUCTION_ST_YZN},
+				{1'b1, `STEP0, `INSTRUCTION_LD_X},
+				{1'b1, `STEP1, `INSTRUCTION_LD_X},
+				{1'b1, `STEP0, `INSTRUCTION_ST_X},
+				{1'b1, `STEP0, `INSTRUCTION_LD_XP},
+				{1'b1, `STEP1, `INSTRUCTION_LD_XP},
+				{1'b1, `STEP0, `INSTRUCTION_ST_XP},
+				{1'b1, `STEP0, `INSTRUCTION_LD_XN},
+				{1'b1, `STEP1, `INSTRUCTION_LD_XN},
+				{1'b1, `STEP0, `INSTRUCTION_ST_XN},
+				{1'b1, `STEP1, `INSTRUCTION_ST_XN},
+				{1'b1, `STEP0, `INSTRUCTION_OUT},
+				{1'b1, `STEP0, `INSTRUCTION_IN},
+				{1'b1, `STEP0, `INSTRUCTION_CBI_SBI},
+				{1'b1, `STEP0, `INSTRUCTION_SBIC_SBIS},
+				{1'b1, `STEP0, `INSTRUCTION_LPM_R},
+				{1'b1, `STEP1, `INSTRUCTION_LPM_R},
+				{1'b1, `STEP0, `INSTRUCTION_LPM_R_P},
+				{1'b1, `STEP1, `INSTRUCTION_LPM_R_P},
+				{1'b1, `STEP0, `INSTRUCTION_LPM_ELPM},
+				{1'b1, `STEP1, `INSTRUCTION_LPM_ELPM}: PC <= PC;
+			endcase
 		end
 	end
 end
 
 mega_alu #(
+	.PLATFORM(PLATFORM),
 	.CORE_TYPE(CORE_TYPE)
 )mega_alu_inst(
 	.inst(pgm_data_registered),
@@ -1208,7 +1185,7 @@ mega_alu #(
 );
 
 mega_regs #(
-	.PLATFORM("XILINX"),
+	.PLATFORM(PLATFORM),
 	.REGISTERED(REGS_REGISTERED)
 )mega_regs_inst(
 	.rst(core_rst),

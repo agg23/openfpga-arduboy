@@ -25,6 +25,14 @@ architecture rtl of core_test_tb is
   signal bridge_rd_data : unsigned (31 downto 0);
   signal bridge_wr_data : unsigned (31 downto 0);
 
+  signal pgm_addr : unsigned (13 downto 0);
+  signal pgm_data : unsigned (15 downto 0);
+
+  shared variable pgm_addr_buff : unsigned (13 downto 0);
+  shared variable read_delay : std_logic := '0';
+
+  file out_file : text open write_mode is "output.txt";
+
   constant apf_word_time : time := 4000 ns;
 
   shared variable apf_write_buffer : unsigned (31 downto 0) := 32b"0";
@@ -44,7 +52,10 @@ begin
     bridge_rd => '0',
     bridge_rd_data => bridge_rd_data,
     bridge_wr => bridge_wr,
-    bridge_wr_data => bridge_wr_data
+    bridge_wr_data => bridge_wr_data,
+
+    pgm_addr_out => pgm_addr,
+    pgm_data_out => pgm_data
     );
 
   process
@@ -108,7 +119,6 @@ begin
     end procedure;
   begin
     bridge_addr <= 32b"0";
-
     wait for period * 2;
 
     read_file;
@@ -117,8 +127,30 @@ begin
 
     reset_n <= '1';
 
-    wait for 100 ms;
+    -- wait until now = 41127487.611 ns;
 
-    stop;
+    -- wait for 200 ms;
+
+    -- stop;
+  end process;
+
+  -- process
+  -- begin
+  --   wait for 57194500 ns;
+
+  --   stop;
+  -- end process;
+
+  process (pgm_data)
+    variable out_line : line;
+  begin
+    write(out_line, to_hstring(pgm_addr & '0') & " (" & to_hstring(pgm_addr) & "): " & to_hstring(pgm_data) & " at " & time'image(now), left, 30);
+    writeline(out_file, out_line);
+  end process;
+
+  process (pgm_addr)
+  begin
+    pgm_addr_buff := pgm_addr;
+
   end process;
 end architecture;
