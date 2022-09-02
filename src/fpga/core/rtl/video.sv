@@ -1,5 +1,5 @@
 // We pixel double our video output for scaling for the Pocket. Since it's a
-// non-integer scale, we use half pixels on either side for pixels 0 and 127
+// non-integer scale, we use half pixels on either side for pixels 0
 module video (
     input wire clk_avr_16,
     input wire clk_pixel,
@@ -31,7 +31,7 @@ module video (
             .clk_i(clk_avr_16),
 
             .edge_color_i(1'b0),
-            .raster_x_i(active_h + 1),
+            .raster_x_i(active_h),
             .raster_y_i(active_v),
             .raster_clk_i(clk_pixel),
             .raster_d_o(video),
@@ -65,7 +65,6 @@ module video (
   wire [8:0] active_h;
   wire [6:0] active_v;
 
-  // +1 is a hack to handle the half pixel in scaling
   assign active_h = h_count - h_disabled;
   assign active_v = v_count - v_disabled;
 
@@ -84,8 +83,7 @@ module video (
       h_sync <= 1;
     end
 
-    // -2 is a hack to handle the half pixel in scaling
-    if (h_count >= h_disabled - 2 && v_count >= v_disabled)
+    if (h_count >= h_disabled && v_count >= v_disabled)
     begin
       video_en <= 1;
     end
