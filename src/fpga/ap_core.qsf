@@ -737,6 +737,8 @@ set_global_assignment -name PARTITION_COLOR 16764057 -section_id Top
 
 # end ENTITY(mf_pllbase_0002)
 # ---------------------------
+set_global_assignment -name VERILOG_FILE "core/rtl/video/ssd1306-to-vga.v"
+set_global_assignment -name VERILOG_FILE "core/rtl/video/spi-slave.v"
 set_global_assignment -name VERILOG_FILE "core/rtl/avr/io-dmux.v"
 set_global_assignment -name VERILOG_FILE "core/rtl/avr/mega-rom.v"
 set_global_assignment -name VERILOG_FILE "core/rtl/avr/atmega-twi_s_h.v"
@@ -764,7 +766,6 @@ set_global_assignment -name VERILOG_FILE "core/rtl/avr/atmega-spi-m.v"
 set_global_assignment -name VERILOG_FILE "core/rtl/avr/atmega-pll.v"
 set_global_assignment -name VERILOG_FILE "core/rtl/avr/atmega-pio.v"
 set_global_assignment -name VERILOG_FILE "core/rtl/avr/atmega-eep.v"
-set_global_assignment -name QIP_FILE core/rtl/avr/atmega.qip
 set_global_assignment -name VERILOG_FILE core/rtl/vgaHdmi.v
 set_global_assignment -name QIP_FILE apf/apf.qip
 set_global_assignment -name VERILOG_FILE core/core_bridge_cmd.v

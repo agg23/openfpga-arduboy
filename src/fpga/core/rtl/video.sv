@@ -1,113 +1,107 @@
+// We pixel double our video output for scaling for the Pocket. Since it's a
+// non-integer scale, we use half pixels on either side for pixels 0 and 127
 module video (
-    input wire clk_oled,
-    input wire clk_pixel_double,
+    input wire clk_avr_16,
+    input wire clk_pixel,
 
-    input wire reset_n,
-
-    input wire oled_dc,
-    input wire oled_data,
+    input wire oled_reset,
+    input wire ss,
+    input wire scl,
+    input wire mosi,
+    input wire dc,
 
     output wire v_sync,
     output wire h_sync,
     output wire video_en,
-    output reg video
+    output wire video
   );
 
-  reg [9:0] read_addr;
-  reg [7:0] read_data;
+  ssd1306 # (
+            .X_OLED_SIZE(128),
+            .Y_OLED_SIZE(64),
+            .X_PARENT_SIZE(256),
+            .Y_PARENT_SIZE(128),
+            .PIXEL_INACTIVE_COLOR(1'b0),
+            .PIXEL_ACTIVE_COLOR(1'b1),
+            .INACTIVE_DISPLAY_COLOR(32'h10101010),
+            .VRAM_BUFFERED_OUTPUT("TRUE"),
+            .FULL_COLOR_OUTPUT("FALSE")
+          ) ssd1306_inst (
+            .rst_i(~oled_reset),
+            .clk_i(clk_avr_16),
 
-  wire invert_video;
+            .edge_color_i(1'b0),
+            .raster_x_i(active_h + 1),
+            .raster_y_i(active_v),
+            .raster_clk_i(clk_pixel),
+            .raster_d_o(video),
 
-  oled_spi oled_spi (
-             .clk_oled(clk_oled),
-             .clk_read_mem(clk_pixel_double),
+            .ss_i(ss),
+            .scl_i(scl),
+            .mosi_i(mosi),
+            .dc_i(dc)
+          );
 
-             .reset_n(reset_n),
-
-             .oled_dc(oled_dc),
-             .oled_data(oled_data),
-
-             .read_addr(read_addr),
-             .read_data(read_data),
-             .invert_video(invert_video)
-           );
-
-  // 128 pixels, 288 with blanking
+  // 128*2 pixels, 416 with blanking
   reg [8:0] h_count;
 
-  // 64 pixels, 83 with blanking
-  reg [6:0] v_count;
-
-  reg [1:0] clock_div = 3;
-
-  reg invert_frame = 0;
+  // 64*2 pixels, 147 with blanking
+  reg [7:0] v_count;
 
   localparam [7:0] h_front_porch = 48;
-  localparam [7:0] h_back_porch = 80;
+  localparam [7:0] h_sync_length = 32;
+  localparam [7:0] h_back_porch = 80 + h_sync_length; // 112
 
   localparam [7:0] v_front_porch = 3;
-  localparam [7:0] v_back_porch = 6;
+  localparam [7:0] v_sync_length = 10;
+  localparam [7:0] v_back_porch = 6 + v_sync_length; // 16
 
-  localparam [8:0] h_total = 288;
-  localparam [7:0] v_total = 83;
+  localparam [7:0] h_disabled = h_front_porch + h_back_porch; // 160
+  localparam [7:0] v_disabled = v_front_porch + v_back_porch; // 19
 
-  always @ (posedge clk_pixel_double)
+  localparam [8:0] h_total = 416;
+  localparam [7:0] v_total = 147;
+
+  wire [8:0] active_h;
+  wire [6:0] active_v;
+
+  // +1 is a hack to handle the half pixel in scaling
+  assign active_h = h_count - h_disabled;
+  assign active_v = v_count - v_disabled;
+
+  always @ (posedge clk_pixel)
   begin
-    // Local vars
-    reg [8:0] active_h;
-    reg [6:0] active_v;
-
-    active_h = h_count - h_front_porch;
-    active_v = v_count - v_front_porch;
-
-    clock_div <= clock_div + 1;
-
     v_sync <= 0;
     h_sync <= 0;
     video_en <= 0;
 
-    if (h_count == 0 && v_count == 0)
+    if (h_count == 0 && v_count == v_front_porch)
     begin
       v_sync <= 1;
     end
-    else if (h_count == 3)
+    else if (h_count == h_front_porch)
     begin
       h_sync <= 1;
     end
 
-    if (h_count >= h_front_porch && h_count < h_total - h_back_porch
-        && v_count >= v_front_porch && v_count < v_total - v_back_porch)
+    // -2 is a hack to handle the half pixel in scaling
+    if (h_count >= h_disabled - 2 && v_count >= v_disabled)
     begin
       video_en <= 1;
     end
 
-    if(clock_div == 3)
-    begin
-      h_count <= h_count + 1;
+    h_count <= h_count + 1;
 
-      if (h_count == h_total - 1)
+    if (h_count == h_total - 1)
+    begin
+      h_count <= 0;
+
+      v_count <= v_count + 1;
+
+      if (v_count == v_total - 1)
       begin
-        h_count <= 0;
-
-        v_count <= v_count + 1;
-
-        if (v_count == v_total - 1)
-        begin
-          v_count <= 0;
-          invert_frame <= invert_video;
-        end
+        v_count <= 0;
       end
-
-      // Read should have completed, write the pixel
-      // Lower 3 bits determine which row contains the pixel
-      video <= invert_frame ^ read_data[active_v[2:0]];
-    end
-    else
-    begin
-      // Screen is 128 pixels wide, so 7 bits of horizontal counter
-      // Screen is 64 pixels tall, so 6 bits of vertical counter, but the data is loaded in as bytes,
-      // so the bottom 3 bits are used to choose the row within the byte
-      read_addr <= {active_v[5:3], active_h[6:0]};
     end
   end
 

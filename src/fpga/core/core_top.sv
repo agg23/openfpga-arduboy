@@ -500,8 +500,8 @@ module core_top (
   // B
   assign buttons[5] = ~cont1_key[5];
 
-  wire ssd1306_ss, ssd1306_rst;
-  wire nmi_sig = 0;
+  wire oled_reset;
+  wire ss, scl, mosi, dc;
 
   atmega32u4_arduboy #(
                        .PLATFORM("XILINX"),
@@ -528,94 +528,41 @@ module core_top (
                        .Buzzer1(Buzzer1),
                        .Buzzer2(Buzzer2),
 
-                       .nmi_sig(nmi_sig),
+                       .nmi_sig(0),
 
-                       .OledDC(oled_dc),
-                       .OledCS(ssd1306_ss),
-                       .OledRST(ssd1306_rst),
-                       .spi_scl(oled_clk),
-                       .spi_mosi(oled_data),
+                       .OledDC(dc),
+                       .OledCS(ss),
+                       .OledRST(oled_reset),
+                       .spi_scl(scl),
+                       .spi_mosi(mosi),
                      );
 
-  // wire pixelValue, ce_pix;
-  // wire VSync, HSync, HBlank, VBlank;
-  // wire vs_s, hs_s, vblank_s, hblank_s;
-  // wire pixel_value_s;
-
-  // synch_3 s_vs(VSync, vs_s, clk_video_5);
-  // synch_3 s_hs(HSync, hs_s, clk_video_5);
-  // synch_3 s_vb(VBlank, vblank_s, clk_video_5);
-  // synch_3 s_hb(HBlank, hblank_s, clk_video_5);
-  // synch_3 s_pixel(pixelValue, pixel_value_s, clk_video_5);
-
-  // vgaHdmi vgaHdmi
-  //         (
-  //           .clock(clk_sys_40),
-  //           .reset(~reset_n),
-  //           .oled_dc(oled_dc),
-  //           .oled_clk(oled_clk),
-  //           .oled_data(oled_data),
-  //           .hsync(HSync),
-  //           .vsync(VSync),
-  //           .hblank(HBlank),
-  //           .vblank(VBlank),
-  //           .pixelValue(pixelValue),
-  //           .ce_pix(ce_pix)
-  //         );
-
+  //
+  // Video
+  // APF scaler requires HSync and VSync to last for a single clock, and video_rgb to be 0 when video_de is low
+  //
   wire video_out;
   video video (
-          .clk_oled(oled_clk),
-          .clk_pixel_double(clk_video_mem_5),
-          .reset_n(reset_n),
-          .oled_dc(oled_dc),
-          .oled_data(oled_data),
+          .clk_avr_16(clk_avr_16),
+          .clk_pixel(clk_video_1_25),
+
+          .oled_reset(oled_reset),
+
+          .ss(ss),
+          .scl(scl),
+          .mosi(mosi),
+          .dc(dc),
+
           .v_sync(video_vs),
           .h_sync(video_hs),
           .video_en(video_de),
           .video(video_out)
         );
 
-  //
-  // Video cleanup
-  // APF scaler requires HSync and VSync to last for a single clock, and video_rgb to be 0 when video_de is low
-  //
-  reg video_skip_reg = 0;
-  // reg video_de_reg;
-  // reg video_hs_reg;
-  // reg video_vs_reg;
-  reg [23:0] video_rgb_reg;
-
   assign video_rgb_clock = clk_video_1_25;
   assign video_rgb_clock_90 = clk_video_1_25_90deg;
-  // assign video_de = video_de_reg;
-  assign video_skip = video_skip_reg;
-  // assign video_hs = video_hs_reg;
-  // assign video_vs = video_vs_reg;
-  assign video_rgb = video_rgb_reg;
-
-  reg hs_prev;
-  reg vs_prev;
-
-  always @(posedge clk_video_1_25)
-  begin
-    // reg de;
-
-    video_rgb_reg <= 24'h0;
-
-    // // Set HSync and VSync to be high for a single cycle on the rising edge of the HSync and VSync coming out of vgaHDMI
-    // video_hs_reg <= ~hs_prev && hs_s;
-    // video_vs_reg <= ~vs_prev && vs_s;
-    // hs_prev <= hs_s;
-    // vs_prev <= vs_s;
-    // de = ~(vblank_s || hblank_s);
-    // video_de_reg <= de;
-
-    if(video_de && video_out)
-    begin
-      video_rgb_reg <= 24'hFFFFFF;
-    end
-  end
+  assign video_skip = 0;
+  assign video_rgb = video_de && video_out ? 24'hFFFFFF : 24'h0;
 
   //
   // audio i2s square wave generator
@@ -693,7 +640,6 @@ module core_top (
   wire clk_avr_16;
   wire clk_video_1_25;
   wire clk_video_1_25_90deg;
-  wire clk_video_mem_5;
 
   wire    pll_core_locked;
 
@@ -704,7 +650,6 @@ module core_top (
                .outclk_0       ( clk_avr_16 ),
                .outclk_1       ( clk_video_1_25 ),
                .outclk_2       ( clk_video_1_25_90deg ),
-               .outclk_3       ( clk_video_mem_5 ),
 
                .locked         ( pll_core_locked )
              );
