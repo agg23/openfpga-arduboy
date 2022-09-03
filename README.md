@@ -4,6 +4,10 @@ A highly modified port of https://github.com/MiSTer-devel/Arduboy_MiSTer by uXeB
 
 Unlike the MiSTer port, this core can directly use `hex` roms that are typically provided for use on [Arduboy](https://www.arduboy.com/).
 
+## Usage
+
+ROMs should be placed in `/Assets/arduboy/common`
+
 ## Limitations
 
 The core currently does not have EEPROM or save state support, so there is no persistence. This will be coming in a future update.
