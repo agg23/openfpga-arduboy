@@ -533,9 +533,10 @@ module core_top (
   // Settings
   //
 
+  // Sound
   reg buzzer1_en = 1;
   reg buzzer2_en = 1;
-  reg allow_buzzer_undefined = 0;
+  reg limit_volume = 1;
 
   always @(posedge clk_74a)
   begin
@@ -552,7 +553,7 @@ module core_top (
         end
         32'h10000008:
         begin
-          allow_buzzer_undefined <= bridge_wr_data[0];
+          limit_volume <= bridge_wr_data[0];
         end
       endcase
     end
@@ -632,11 +633,12 @@ module core_top (
   assign buzzer_2_in = buzzer2_en && Buzzer2;
 
   // Buzzer1 results in positive movement, and Buzzer2 negative
-  assign buzzer_1_audio = {1'b0,{31{buzzer_1_in}}};
-  assign buzzer_2_audio = buzzer_2_in ? 32'h80000001 : 0;
+  assign buzzer_1_audio = limit_volume ? {2'b0,{30{buzzer_1_in}}} : {1'b0,{31{buzzer_1_in}}};
+  assign buzzer_2_audio = buzzer_2_in ?
+       limit_volume ? 32'hC0000001 : 32'h80000001 : 0;
 
-  // Both buzzers high at once is undefined behavior. If that happens, let Buzzer1 win
-  assign audio_left = ~allow_buzzer_undefined && buzzer_1_in && buzzer_2_in ? buzzer_1_audio : buzzer_1_audio + buzzer_2_audio;
+  // Both buzzers high at once is undefined behavior. If that happens, 0 the output
+  assign audio_left = buzzer_1_in && buzzer_2_in ? 0 : buzzer_1_audio + buzzer_2_audio;
   synch_3 #(.WIDTH(32)) s5(audio_left, audgen_sampdata_s, audgen_sclk);
   reg		[31:0]	audgen_sampshift;
   reg		[4:0]	audgen_lrck_cnt;
