@@ -4,11 +4,11 @@
     "metadata": {
       "platform_ids": ["arduboy"],
       "shortname": "Arduboy",
-      "description": "Arduboy",
+      "description": "A small, portable Arduino console",
       "author": "agg23",
-      "url": "https://github.com/open-fpga/core-template",
+      "url": "https://github.com/agg23/analogue-arduboy/",
       "version": "1.0.0",
-      "date_release": "2022-08-23"
+      "date_release": "2022-09-03"
     },
     "framework": {
       "target_product": "Analogue Pocket",
@@ -27,7 +27,7 @@
       {
         "name": "default",
         "id": 0,
-        "filename": "bitstream.rbf_r"
+        "filename": "arduboy.rbf_r"
       }
     ]
   }
