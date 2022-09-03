@@ -1,8 +1,8 @@
 # Arduboy for Analogue Pocket
 
-A highly modified port of https://github.com/MiSTer-devel/Arduboy_MiSTer by uXeBoy. This core has been updated to the latest Atmega core created by [Iulian Gheorghiu](https://github.com/dev-board-tech).
+A highly modified port of [Arduboy_MiSTer](https://github.com/MiSTer-devel/Arduboy_MiSTer) by uXeBoy. This core has been updated to the latest Atmega core created by [Iulian Gheorghiu](https://github.com/dev-board-tech).
 
-Unlike the MiSTer port, this core can directly use `hex` roms that are typically provided for use on [Arduboy](https://www.arduboy.com/).
+Unlike the MiSTer port, this core can directly use `hex` ROMs that are typically provided for use on [Arduboy](https://www.arduboy.com/).
 
 ## Usage
 
@@ -12,7 +12,7 @@ ROMs should be placed in `/Assets/arduboy/common`
 
 The core currently does not have EEPROM or save state support, so there is no persistence. This will be coming in a future update.
 
-Core may exibit strange audio behavior on a few games. The cause of this issue is unknown at this time. Settings are provided to tweak the audio output to make it more agreeable.
+Core may exhibit strange audio behavior on a few games. The cause of this issue is unknown at this time. Settings are provided to tweak the audio output to make it more agreeable.
 
 As far as we can tell, any tearing shown by this core is also presented on device. If you can prove this is not the case, please let me know.
 
