@@ -16,14 +16,15 @@ module video (
     output wire video
   );
 
+  wire ssd_vid;
+
   ssd1306 # (
             .X_OLED_SIZE(128),
             .Y_OLED_SIZE(64),
-            .X_PARENT_SIZE(256),
-            .Y_PARENT_SIZE(128),
+            .X_PARENT_SIZE(128),
+            .Y_PARENT_SIZE(64),
             .PIXEL_INACTIVE_COLOR(1'b0),
             .PIXEL_ACTIVE_COLOR(1'b1),
-            .INACTIVE_DISPLAY_COLOR(32'h10101010),
             .VRAM_BUFFERED_OUTPUT("TRUE"),
             .FULL_COLOR_OUTPUT("FALSE")
           ) ssd1306_inst (
@@ -31,10 +32,10 @@ module video (
             .clk_i(clk_avr_16),
 
             .edge_color_i(1'b0),
-            .raster_x_i(active_h),
-            .raster_y_i(active_v),
+            .raster_x_i(current_h / 6),
+            .raster_y_i(current_v / 6),
             .raster_clk_i(clk_pixel),
-            .raster_d_o(video),
+            .raster_d_o(ssd_vid),
 
             .ss_i(ss),
             .scl_i(scl),
@@ -42,31 +43,45 @@ module video (
             .dc_i(dc)
           );
 
-  // 128*2 pixels, 416 with blanking
-  reg [8:0] h_count;
+  assign video =
+         h_count > h_disabled + h_spacing &&
+         v_count > v_disabled + v_spacing &&
+         current_h < h_active - h_spacing &&
+         current_v < v_active - v_spacing
+         ? ssd_vid : 0;
 
-  // 64*2 pixels, 147 with blanking
-  reg [7:0] v_count;
+  reg [10:0] h_count;
 
-  localparam [7:0] h_front_porch = 48;
-  localparam [7:0] h_sync_length = 32;
-  localparam [7:0] h_back_porch = 80 + h_sync_length; // 112
+  reg [9:0] v_count;
 
-  localparam [7:0] v_front_porch = 3;
-  localparam [7:0] v_sync_length = 10;
-  localparam [7:0] v_back_porch = 6 + v_sync_length; // 16
+  localparam [9:0] h_front_porch = 40;
+  localparam [9:0] h_sync_length = 80;
+  localparam [9:0] h_back_porch = 120 + h_sync_length; // 200
 
-  localparam [7:0] h_disabled = h_front_porch + h_back_porch; // 160
-  localparam [7:0] v_disabled = v_front_porch + v_back_porch; // 19
+  localparam [9:0] v_front_porch = 3;
+  localparam [9:0] v_sync_length = 10;
+  localparam [9:0] v_back_porch = 15 + v_sync_length; // 25
 
-  localparam [8:0] h_total = 416;
-  localparam [7:0] v_total = 147;
+  localparam [9:0] h_disabled = h_front_porch + h_back_porch; // 240
+  localparam [9:0] v_disabled = v_front_porch + v_back_porch; // 28
 
-  wire [8:0] active_h;
-  wire [6:0] active_v;
+  localparam [10:0] h_total = 1040;
+  localparam [9:0] v_total = 748;
 
-  assign active_h = h_count - h_disabled;
-  assign active_v = v_count - v_disabled;
+  localparam [9:0] h_active = 800;
+  localparam [9:0] v_active = 720;
+
+  localparam [9:0] h_active_oled = 768;
+  localparam [9:0] v_active_oled = 384;
+
+  localparam [9:0] h_spacing = (h_active - h_active_oled) / 2;
+  localparam [9:0] v_spacing = (v_active - v_active_oled) / 2;
+
+  wire [9:0] current_h;
+  wire [9:0] current_v;
+
+  assign current_h = h_count - h_disabled - h_spacing;
+  assign current_v = v_count - v_disabled - v_spacing;
 
   always @ (posedge clk_pixel)
   begin

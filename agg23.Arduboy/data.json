@@ -5,7 +5,7 @@
             {
                 "name": "ROM",
                 "required": true,
-                "parameters": 8,
+                "parameters": 257,
                 "extensions": ["hex"],
                 "address": "0x00000000"
             }

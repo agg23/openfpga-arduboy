@@ -316,14 +316,6 @@ module core_top (
       begin
         bridge_rd_data <= 0;
       end
-      32'h00000000:
-      begin
-        bridge_rd_data <= pgm_addr;
-      end
-      32'h00000004:
-      begin
-        bridge_rd_data <= pgm_data;
-      end
       32'hF8xxxxxx:
       begin
         bridge_rd_data <= cmd_bridge_rd_data;
