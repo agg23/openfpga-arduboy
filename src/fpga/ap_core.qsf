@@ -748,8 +748,6 @@ set_global_assignment -name VERILOG_FILE core/rtl/avr/atmega_twi_s.v
 set_global_assignment -name VERILOG_FILE core/rtl/avr/atmega_twi.v
 set_global_assignment -name VERILOG_FILE core/rtl/avr/atmega32u4_arduboy.v
 set_global_assignment -name SYSTEMVERILOG_FILE core/rtl/video.sv
-set_global_assignment -name SYSTEMVERILOG_FILE core/rtl/oled_spi.sv
-set_global_assignment -name VERILOG_FILE core/rtl/data_loader_16.v
 set_global_assignment -name VERILOG_FILE core/rtl/rom_loader.v
 set_global_assignment -name VERILOG_FILE core/rtl/data_loader_8.v
 set_global_assignment -name SYSTEMVERILOG_FILE core/core_top.sv
@@ -766,7 +764,6 @@ set_global_assignment -name VERILOG_FILE "core/rtl/avr/atmega-spi-m.v"
 set_global_assignment -name VERILOG_FILE "core/rtl/avr/atmega-pll.v"
 set_global_assignment -name VERILOG_FILE "core/rtl/avr/atmega-pio.v"
 set_global_assignment -name VERILOG_FILE "core/rtl/avr/atmega-eep.v"
-set_global_assignment -name VERILOG_FILE core/rtl/vgaHdmi.v
 set_global_assignment -name QIP_FILE apf/apf.qip
 set_global_assignment -name VERILOG_FILE core/core_bridge_cmd.v
 set_global_assignment -name SDC_FILE core/core_constraints.sdc
