@@ -530,6 +530,35 @@ module core_top (
                      );
 
   //
+  // Settings
+  //
+
+  reg buzzer1_en = 1;
+  reg buzzer2_en = 1;
+  reg allow_buzzer_undefined = 0;
+
+  always @(posedge clk_74a)
+  begin
+    if (bridge_wr)
+    begin
+      case(bridge_addr)
+        32'h10000000:
+        begin
+          buzzer1_en <= bridge_wr_data[0];
+        end
+        32'h10000004:
+        begin
+          buzzer2_en <= bridge_wr_data[0];
+        end
+        32'h10000008:
+        begin
+          allow_buzzer_undefined <= bridge_wr_data[0];
+        end
+      endcase
+    end
+  end
+
+  //
   // Video
   // APF scaler requires HSync and VSync to last for a single clock, and video_rgb to be 0 when video_de is low
   //
@@ -592,10 +621,22 @@ module core_top (
   //
   // synchronize audio samples coming from the core
   wire	[31:0]	audgen_sampdata_s;
+  wire  [31:0]  buzzer_1_audio;
+  wire  [31:0]  buzzer_2_audio;
   wire  [31:0]  audio_left;
-  // Top bit is clear since it's signed.
-  // Second to top bit is clear since we're adding two numbers
-  assign audio_left = {2'b0,{30{Buzzer1}}} + {2'b0,{30{Buzzer2}}};
+
+  wire buzzer_1_in;
+  wire buzzer_2_in;
+
+  assign buzzer_1_in = buzzer1_en && Buzzer1;
+  assign buzzer_2_in = buzzer2_en && Buzzer2;
+
+  // Buzzer1 results in positive movement, and Buzzer2 negative
+  assign buzzer_1_audio = {1'b0,{31{buzzer_1_in}}};
+  assign buzzer_2_audio = buzzer_2_in ? 32'h80000001 : 0;
+
+  // Both buzzers high at once is undefined behavior. If that happens, let Buzzer1 win
+  assign audio_left = ~allow_buzzer_undefined && buzzer_1_in && buzzer_2_in ? buzzer_1_audio : buzzer_1_audio + buzzer_2_audio;
   synch_3 #(.WIDTH(32)) s5(audio_left, audgen_sampdata_s, audgen_sclk);
   reg		[31:0]	audgen_sampshift;
   reg		[4:0]	audgen_lrck_cnt;

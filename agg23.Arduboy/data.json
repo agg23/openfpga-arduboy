@@ -1,14 +1,14 @@
 {
-    "data": {
-        "magic": "APF_VER_1",
-        "data_slots": [
-            {
-                "name": "ROM",
-                "required": true,
-                "parameters": 257,
-                "extensions": ["hex"],
-                "address": "0x00000000"
-            }
-        ]
-    }
+  "data": {
+    "magic": "APF_VER_1",
+    "data_slots": [
+      {
+        "name": "HEX",
+        "required": true,
+        "parameters": 257,
+        "extensions": ["hex"],
+        "address": "0x00000000"
+      }
+    ]
+  }
 }
