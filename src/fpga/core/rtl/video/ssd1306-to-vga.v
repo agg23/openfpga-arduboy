@@ -188,6 +188,8 @@ begin
 	end
 end
 
+reg latched_dc_command = 0;
+
 // Cmd receive
 always @ (posedge rst_i or posedge clk_i)
 begin
@@ -213,13 +215,21 @@ begin
 		if(~rdy)
 		begin
 			rdy_ack <= 1'b0;
+
+			if (~dc_i && scl_i) begin
+				// Data was sent while in command mode
+				// Latch command prompt
+				latched_dc_command <= 1;
+			end
 		end
 		dc_del <= {dc_del, dc_i};
 		spi_rdy_n <= rdy;
+
 		if({spi_rdy_n, rdy} == 2'b01)
 		begin
 			rdy_ack <= 1'b1;
-			if(dc_i)
+			// If is data, and no command in progress
+			if(dc_i && ~latched_dc_command)
 			begin // Data
 				mem_wr <= 1'b1;
 				write_addr <= {y_cnt, x_cnt};
@@ -228,6 +238,8 @@ begin
 				byte_cnt = 2'd0;
 				curr_cmd_len = 2'd0;
 				curr_cmd = 8'h00;
+
+				latched_dc_command <= 0;
 			end
 			else
 			begin // Command
@@ -263,6 +275,8 @@ begin
 					byte_cnt = 2'd0;
 					curr_cmd_len = 2'd0;
 					curr_cmd = 8'h00;
+
+					latched_dc_command <= 0;
 				end
 			end
 		end
