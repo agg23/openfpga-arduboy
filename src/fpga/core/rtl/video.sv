@@ -10,9 +10,9 @@ module video (
     input wire mosi,
     input wire dc,
 
-    output wire v_sync,
-    output wire h_sync,
-    output wire video_en,
+    output logic v_sync,
+    output logic h_sync,
+    output logic video_en,
     output wire video
   );
 
@@ -43,16 +43,10 @@ module video (
             .dc_i(dc)
           );
 
-  assign video =
-         h_count > h_disabled + h_spacing &&
-         v_count > v_disabled + v_spacing &&
-         current_h < h_active - h_spacing &&
-         current_v < v_active - v_spacing
-         ? ssd_vid : 0;
-
-  reg [10:0] h_count;
-
-  reg [9:0] v_count;
+  logic [10:0] h_count = 11'd0;
+  logic [9:0] v_count = 10'd0;
+  logic [10:0] h_count_d = 11'd0;
+  logic [9:0] v_count_d = 10'd0;
 
   localparam [9:0] h_front_porch = 40;
   localparam [9:0] h_sync_length = 80;
@@ -77,31 +71,41 @@ module video (
   localparam [9:0] h_spacing = (h_active - h_active_oled) / 2;
   localparam [9:0] v_spacing = (v_active - v_active_oled) / 2;
 
-  wire [9:0] current_h;
-  wire [9:0] current_v;
+  localparam [10:0] h_active_start = h_disabled;
+  localparam [10:0] h_active_end = h_disabled + h_active;
+  localparam [9:0] v_active_start = v_disabled;
+  localparam [9:0] v_active_end = v_disabled + v_active;
 
-  assign current_h = h_count - h_disabled - h_spacing;
-  assign current_v = v_count - v_disabled - v_spacing;
+  localparam [10:0] h_oled_start = h_disabled + h_spacing;
+  localparam [10:0] h_oled_end = h_oled_start + h_active_oled;
+  localparam [9:0] v_oled_start = v_disabled + v_spacing;
+  localparam [9:0] v_oled_end = v_oled_start + v_active_oled;
+
+  wire [10:0] current_h;
+  wire [9:0] current_v;
+  wire oled_window_d;
+
+  assign current_h = h_count - h_oled_start;
+  assign current_v = v_count - v_oled_start;
+  assign oled_window_d =
+         h_count_d >= h_oled_start &&
+         h_count_d < h_oled_end &&
+         v_count_d >= v_oled_start &&
+         v_count_d < v_oled_end;
+  assign video = oled_window_d ? ssd_vid : 1'b0;
 
   always @ (posedge clk_pixel)
   begin
-    v_sync <= 0;
-    h_sync <= 0;
-    video_en <= 0;
+    h_count_d <= h_count;
+    v_count_d <= v_count;
 
-    if (h_count == 0 && v_count == v_front_porch)
-    begin
-      v_sync <= 1;
-    end
-    else if (h_count == h_front_porch)
-    begin
-      h_sync <= 1;
-    end
-
-    if (h_count >= h_disabled && v_count >= v_disabled)
-    begin
-      video_en <= 1;
-    end
+    v_sync <= h_count == 0 && v_count == v_front_porch;
+    h_sync <= h_count == h_front_porch;
+    video_en <=
+      h_count >= h_active_start &&
+      h_count < h_active_end &&
+      v_count >= v_active_start &&
+      v_count < v_active_end;
 
     h_count <= h_count + 1;
 
