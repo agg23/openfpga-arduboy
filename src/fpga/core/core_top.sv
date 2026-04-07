@@ -381,9 +381,6 @@ module core_top (
   localparam [31:0] EEPROM_BYTES = 32'd1024;
   localparam [9:0] EEPROM_DATATABLE_ADDR = 10'd3;
 
-  wire    [9:0]   datatable_addr = EEPROM_DATATABLE_ADDR;
-  wire            datatable_wren = 1'b1;
-  wire    [31:0]  datatable_data = EEPROM_BYTES;
   wire    [31:0]  datatable_q;
 
   reg eeprom_save_wr_74a = 1'b0;
@@ -438,9 +435,9 @@ module core_top (
 
                     .osnotify_inmenu        ( osnotify_inmenu ),
 
-                    .datatable_addr         ( datatable_addr ),
-                    .datatable_wren         ( datatable_wren ),
-                    .datatable_data         ( datatable_data ),
+                    .datatable_addr         ( EEPROM_DATATABLE_ADDR ),
+                    .datatable_wren         ( 1'b1 ),
+                    .datatable_data         ( EEPROM_BYTES ),
                     .datatable_q            ( datatable_q )
 
                   );
