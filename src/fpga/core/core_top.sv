@@ -448,7 +448,7 @@ module core_top (
   // Pocket can hold the core in reset while streaming the EEPROM dataslot.
   always @(posedge clk_74a)
   begin
-    if (~reset_n && ~eeprom_save_wr_74a && ~eeprom_save_rd_74a)
+    if (~pll_core_locked)
     begin
       eeprom_save_wr_74a <= 1'b0;
       eeprom_save_rd_74a <= 1'b0;
