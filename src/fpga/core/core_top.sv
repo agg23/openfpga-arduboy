@@ -318,7 +318,7 @@ module core_top (
       end
       32'h20??????:
       begin
-        bridge_rd_data = save_readback_active_74a ? eeprom_bridge_rd_data : 32'd0;
+        bridge_rd_data = eeprom_save_rd_74a ? eeprom_bridge_rd_data : 32'd0;
       end
       32'hF8??????:
       begin
@@ -386,11 +386,12 @@ module core_top (
   localparam [31:0] EEPROM_BYTES = 32'd1024;
   localparam [9:0] EEPROM_DATATABLE_ADDR = 10'd3;
 
-  reg [2:0] datatable_div = 3'd0;
-  reg save_restore_active_74a = 1'b0;
-  reg save_readback_active_74a = 1'b0;
-  wire save_restore_active_avr;
-  wire save_readback_active_avr;
+  reg eeprom_datatable_init_74a = 1'b1;
+  reg eeprom_save_wr_74a = 1'b0;
+  reg eeprom_save_rd_74a = 1'b0;
+  wire [1:0] eeprom_save_access_avr;
+  wire eeprom_save_wr_avr = eeprom_save_access_avr[1];
+  wire eeprom_save_rd_avr = eeprom_save_access_avr[0];
 
   core_bridge_cmd icb (
 
@@ -446,60 +447,62 @@ module core_top (
 
                   );
 
-  always @(posedge clk_74a or negedge pll_core_locked)
+  always @(posedge clk_74a or negedge reset_n)
   begin
-    if (~pll_core_locked)
+    if (~reset_n)
     begin
       datatable_addr <= 10'd0;
       datatable_data <= 32'd0;
       datatable_wren <= 1'b0;
-      datatable_div <= 3'd0;
-      save_restore_active_74a <= 1'b0;
-      save_readback_active_74a <= 1'b0;
+      eeprom_datatable_init_74a <= 1'b1;
     end
     else
     begin
-      if (datatable_div > 3'd4)
+      datatable_addr <= 10'd0;
+      datatable_wren <= 1'b0;
+
+      if (~pll_core_locked)
       begin
+        eeprom_datatable_init_74a <= 1'b1;
+      end
+      else if (eeprom_datatable_init_74a)
+      begin
+        datatable_addr <= EEPROM_DATATABLE_ADDR;
         datatable_wren <= 1'b1;
         datatable_data <= EEPROM_BYTES;
-        datatable_addr <= EEPROM_DATATABLE_ADDR;
+        eeprom_datatable_init_74a <= 1'b0;
       end
-      else
-      begin
-        datatable_wren <= 1'b0;
-        datatable_addr <= 10'd0;
-      end
-      datatable_div <= datatable_div + 1'b1;
 
-      if (dataslot_allcomplete)
-      begin
-        save_restore_active_74a <= 1'b0;
-        save_readback_active_74a <= 1'b0;
-      end
-      else
-      begin
-        if (dataslot_requestwrite && (dataslot_requestwrite_id[7:0] == EEPROM_SLOT_ID))
-        begin
-          save_restore_active_74a <= 1'b1;
-        end
-        if (dataslot_requestread && (dataslot_requestread_id[7:0] == EEPROM_SLOT_ID))
-        begin
-          save_readback_active_74a <= 1'b1;
-        end
-      end
     end
   end
 
-  synch_3 save_restore_sync(
-    save_restore_active_74a,
-    save_restore_active_avr,
-    clk_avr_16
-  );
+  // Keep save access latched across reset_n transitions.
+  // Pocket can hold the core in reset while streaming the EEPROM dataslot.
+  always @(posedge clk_74a)
+  begin
+    if (~pll_core_locked)
+    begin
+      eeprom_save_wr_74a <= 1'b0;
+      eeprom_save_rd_74a <= 1'b0;
+    end
+    else if (dataslot_allcomplete)
+    begin
+      eeprom_save_wr_74a <= 1'b0;
+      eeprom_save_rd_74a <= 1'b0;
+    end
+    else if (dataslot_requestwrite && (dataslot_requestwrite_id[7:0] == EEPROM_SLOT_ID))
+    begin
+      eeprom_save_wr_74a <= 1'b1;
+    end
+    else if (dataslot_requestread && (dataslot_requestread_id[7:0] == EEPROM_SLOT_ID))
+    begin
+      eeprom_save_rd_74a <= 1'b1;
+    end
+  end
 
-  synch_3 save_readback_sync(
-    save_readback_active_74a,
-    save_readback_active_avr,
+  synch_3 #(.WIDTH(2)) eeprom_save_sync(
+    {eeprom_save_wr_74a, eeprom_save_rd_74a},
+    eeprom_save_access_avr,
     clk_avr_16
   );
 
@@ -630,10 +633,10 @@ module core_top (
 
                        .ext_eep_addr_i({7'd0, eeprom_rw_addr}),
                        .ext_eep_data_i(eeprom_data_in),
-                       .ext_eep_data_wr_i(eeprom_wr & save_restore_active_avr),
+                       .ext_eep_data_wr_i(eeprom_wr & eeprom_save_wr_avr),
                        .ext_eep_data_o(eeprom_data_out),
-                       .ext_eep_data_rd_i(eeprom_rd & save_readback_active_avr),
-                       .ext_eep_data_en_i((eeprom_wr & save_restore_active_avr) | (eeprom_rd & save_readback_active_avr)),
+                       .ext_eep_data_rd_i(eeprom_rd & eeprom_save_rd_avr),
+                       .ext_eep_data_en_i((eeprom_wr & eeprom_save_wr_avr) | (eeprom_rd & eeprom_save_rd_avr)),
 
                        .buttons(buttons),
                        //  .joystick_analog(8'd0),
