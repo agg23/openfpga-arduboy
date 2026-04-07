@@ -377,21 +377,19 @@ module core_top (
 
   // bridge data slot access
 
-  reg     [9:0]   datatable_addr = 10'd0;
-  reg             datatable_wren = 1'b0;
-  reg     [31:0]  datatable_data = 32'd0;
-  wire    [31:0]  datatable_q;
-
   localparam [7:0] EEPROM_SLOT_ID = 8'd10;
   localparam [31:0] EEPROM_BYTES = 32'd1024;
   localparam [9:0] EEPROM_DATATABLE_ADDR = 10'd3;
 
-  reg eeprom_datatable_init_74a = 1'b1;
+  wire    [9:0]   datatable_addr = EEPROM_DATATABLE_ADDR;
+  wire            datatable_wren = 1'b1;
+  wire    [31:0]  datatable_data = EEPROM_BYTES;
+  wire    [31:0]  datatable_q;
+
   reg eeprom_save_wr_74a = 1'b0;
   reg eeprom_save_rd_74a = 1'b0;
-  wire [1:0] eeprom_save_access_avr;
-  wire eeprom_save_wr_avr = eeprom_save_access_avr[1];
-  wire eeprom_save_rd_avr = eeprom_save_access_avr[0];
+  wire eeprom_save_wr_avr;
+  wire eeprom_save_rd_avr;
 
   core_bridge_cmd icb (
 
@@ -447,40 +445,10 @@ module core_top (
 
                   );
 
-  always @(posedge clk_74a or negedge reset_n)
-  begin
-    if (~reset_n)
-    begin
-      datatable_addr <= 10'd0;
-      datatable_data <= 32'd0;
-      datatable_wren <= 1'b0;
-      eeprom_datatable_init_74a <= 1'b1;
-    end
-    else
-    begin
-      datatable_addr <= 10'd0;
-      datatable_wren <= 1'b0;
-
-      if (~pll_core_locked)
-      begin
-        eeprom_datatable_init_74a <= 1'b1;
-      end
-      else if (eeprom_datatable_init_74a)
-      begin
-        datatable_addr <= EEPROM_DATATABLE_ADDR;
-        datatable_wren <= 1'b1;
-        datatable_data <= EEPROM_BYTES;
-        eeprom_datatable_init_74a <= 1'b0;
-      end
-
-    end
-  end
-
-  // Keep save access latched across reset_n transitions.
   // Pocket can hold the core in reset while streaming the EEPROM dataslot.
   always @(posedge clk_74a)
   begin
-    if (~pll_core_locked)
+    if (~reset_n && ~eeprom_save_wr_74a && ~eeprom_save_rd_74a)
     begin
       eeprom_save_wr_74a <= 1'b0;
       eeprom_save_rd_74a <= 1'b0;
@@ -500,9 +468,15 @@ module core_top (
     end
   end
 
-  synch_3 #(.WIDTH(2)) eeprom_save_sync(
-    {eeprom_save_wr_74a, eeprom_save_rd_74a},
-    eeprom_save_access_avr,
+  synch_3 eeprom_save_wr_sync(
+    eeprom_save_wr_74a,
+    eeprom_save_wr_avr,
+    clk_avr_16
+  );
+
+  synch_3 eeprom_save_rd_sync(
+    eeprom_save_rd_74a,
+    eeprom_save_rd_avr,
     clk_avr_16
   );
 
