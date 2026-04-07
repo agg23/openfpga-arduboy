@@ -66,6 +66,11 @@ reg[2:0]eempe_timeout_cnt;
 reg eep_wr;
 reg [7:0]dat_to_write;
 reg [7:0]read_tmp;
+localparam integer EEP_ADDR_WIDTH_INT = $clog2(EEP_SIZE);
+wire [15:0]cpu_eep_addr = {EEARH, EEARL};
+wire [EEP_ADDR_WIDTH_INT-1:0]eep_addr = ext_eep_data_en_i ? ext_eep_addr_i[EEP_ADDR_WIDTH_INT-1:0] : cpu_eep_addr[EEP_ADDR_WIDTH_INT-1:0];
+wire ext_eep_access = ext_eep_data_en_i;
+wire ext_eep_wr = ext_eep_data_wr_i & ext_eep_data_en_i;
 
 reg int_p;
 reg int_n;
@@ -81,7 +86,7 @@ end
 always @ *
 begin
 	bus_o = 8'h00;
-	if(rd_i)
+	if(rd_i & ~ext_eep_access)
 	begin
 		case(addr_i)
 			EEARH_ADDR: bus_o = EEARH;
@@ -105,18 +110,18 @@ begin
 		eempe_timeout_cnt <= 3'h0;
 		int_p <= 1'b0;
 		int_n <= 1'b0;
-		dat_to_write <= 1'b0;
+		dat_to_write <= 8'h00;
 		eep_wr <= 1'b0;
 	end
 	else
 	begin
 		content_modifyed_o <= 1'b0;
 		eep_wr <= 1'b0;
-		if(eempe_timeout_cnt)
+		if(|eempe_timeout_cnt & ~ext_eep_access)
 		begin
 			eempe_timeout_cnt <= eempe_timeout_cnt - 1;
 		end
-		if(wr_i)
+		if(wr_i & ~ext_eep_access)
 		begin
 			case(addr_i)
 				EEARH_ADDR: EEARH <= bus_i;
@@ -132,7 +137,7 @@ begin
 				end
 			endcase
 		end
-		if((&EECR[2:1]) )
+		if((&EECR[2:1]) & ~ext_eep_access)
 		begin
 			if(|eempe_timeout_cnt)
 			begin
@@ -147,6 +152,9 @@ begin
 						dat_to_write <= 8'h00;
 						eep_wr <= 1'b1;
 					end
+					default:
+					begin
+					end
 				endcase
 			end
 			EECR[2:1] <= 2'b00;
@@ -155,16 +163,16 @@ begin
 				int_p <= ~int_p;
 			end
 		end
-		if(EECR[0])
+		if(EECR[0] & ~ext_eep_access)
 		begin
 			EEDR_READ <= ~read_tmp;
 			EECR[0] <= 1'b0;
 		end
-		if(int_ack_i)
+		if(int_ack_i & ~ext_eep_access)
 		begin
 			int_n <= int_p;
 		end
-		if(eep_wr)
+		if(eep_wr | ext_eep_wr)
 		begin
 			content_modifyed_o <= content_modifyed_o | 1'b1;
 		end
@@ -173,11 +181,11 @@ end
 
 always @ (posedge clk_i)
 begin
-	if(eep_wr)
+	if(eep_wr | ext_eep_wr)
 	begin
-		eep[ext_eep_data_en_i ? ext_eep_addr_i : {EEARH, EEARL}] <= ext_eep_data_en_i ? ~ext_eep_data_i : dat_to_write;
+		eep[eep_addr] <= ext_eep_data_en_i ? ~ext_eep_data_i : dat_to_write;
 	end
-	read_tmp <= eep[ext_eep_data_en_i ? ext_eep_addr_i : {EEARH, EEARL}];
+	read_tmp <= eep[eep_addr];
 end
 
 assign ext_eep_data_o = (ext_eep_data_rd_i & ext_eep_data_en_i) ? ~read_tmp : 8'h00;

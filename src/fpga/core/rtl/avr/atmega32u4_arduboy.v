@@ -131,6 +131,13 @@ module atmega32u4_arduboy # (
 	output [15:0]pgm_addr,
 	input [15:0]pgm_data,
 
+	input [16:0]ext_eep_addr_i,
+	input [7:0]ext_eep_data_i,
+	input ext_eep_data_wr_i,
+	output [7:0]ext_eep_data_o,
+	input ext_eep_data_rd_i,
+	input ext_eep_data_en_i,
+
 /* For IO's that are not included in original ATmega32u4 device */
 	output [7:0]io_addr,
 	output [7:0]io_out,
@@ -1100,12 +1107,12 @@ atmega_eep # (
 	.int_o(int_ee_ready),
 	.int_ack_i(int_ee_ready_ack),
 
-	.ext_eep_addr_i(),
-	.ext_eep_data_i(),
-	.ext_eep_data_wr_i(),
-	.ext_eep_data_o(),
-	.ext_eep_data_rd_i(),
-	.ext_eep_data_en_i(),
+	.ext_eep_addr_i(ext_eep_addr_i),
+	.ext_eep_data_i(ext_eep_data_i),
+	.ext_eep_data_wr_i(ext_eep_data_wr_i),
+	.ext_eep_data_o(ext_eep_data_o),
+	.ext_eep_data_rd_i(ext_eep_data_rd_i),
+	.ext_eep_data_en_i(ext_eep_data_en_i),
 
 	.content_modifyed_o(eep_content_modifyed),
 	.debug_o()
@@ -1114,6 +1121,7 @@ end
 else
 begin
 assign dat_eeprom_d_out = 0;
+assign ext_eep_data_o = 0;
 end
 endgenerate
 /* !EEPROM */
