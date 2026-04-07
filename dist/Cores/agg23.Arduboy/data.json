@@ -8,6 +8,17 @@
         "parameters": 257,
         "extensions": ["hex"],
         "address": "0x00000000"
+      },
+      {
+        "id": 10,
+        "name": "EEPROM",
+        "required": false,
+        "nonvolatile": true,
+        "parameters": "0x84",
+        "extensions": ["sav"],
+        "filename": "arduboy_eeprom.sav",
+        "address": "0x20000000",
+        "size_maximum": "0x00000400"
       }
     ]
   }

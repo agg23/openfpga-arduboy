@@ -10,7 +10,7 @@ ROMs should be placed in `/Assets/arduboy/common`
 
 ## Limitations
 
-The core currently does not have EEPROM or save state support, so there is no persistence. This will be coming in a future update.
+EEPROM-backed save files are supported through the Pocket save system. Full Pocket save states are still not implemented.
 
 Core may exhibit strange audio behavior on a few games. The cause of this issue is unknown at this time. Settings are provided to tweak the audio output to make it more agreeable.
 

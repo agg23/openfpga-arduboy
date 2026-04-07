@@ -311,14 +311,18 @@ module core_top (
   // add your own devices here
   always @(*)
   begin
-    casex(bridge_addr)
+    casez(bridge_addr)
       default:
       begin
-        bridge_rd_data <= 0;
+        bridge_rd_data = 32'd0;
       end
-      32'hF8xxxxxx:
+      32'h20??????:
       begin
-        bridge_rd_data <= cmd_bridge_rd_data;
+        bridge_rd_data = eeprom_save_rd_74a ? eeprom_bridge_rd_data : 32'd0;
+      end
+      32'hF8??????:
+      begin
+        bridge_rd_data = cmd_bridge_rd_data;
       end
     endcase
   end
@@ -348,22 +352,22 @@ module core_top (
 
   wire            dataslot_allcomplete;
 
-  wire            savestate_supported;
-  wire    [31:0]  savestate_addr;
-  wire    [31:0]  savestate_size;
-  wire    [31:0]  savestate_maxloadsize;
+  wire            savestate_supported = 1'b0;
+  wire    [31:0]  savestate_addr = 32'd0;
+  wire    [31:0]  savestate_size = 32'd0;
+  wire    [31:0]  savestate_maxloadsize = 32'd0;
 
   wire            savestate_start;
-  wire            savestate_start_ack;
-  wire            savestate_start_busy;
-  wire            savestate_start_ok;
-  wire            savestate_start_err;
+  wire            savestate_start_ack = 1'b0;
+  wire            savestate_start_busy = 1'b0;
+  wire            savestate_start_ok = 1'b0;
+  wire            savestate_start_err = 1'b0;
 
   wire            savestate_load;
-  wire            savestate_load_ack;
-  wire            savestate_load_busy;
-  wire            savestate_load_ok;
-  wire            savestate_load_err;
+  wire            savestate_load_ack = 1'b0;
+  wire            savestate_load_busy = 1'b0;
+  wire            savestate_load_ok = 1'b0;
+  wire            savestate_load_err = 1'b0;
 
   wire            osnotify_inmenu;
 
@@ -373,10 +377,16 @@ module core_top (
 
   // bridge data slot access
 
-  wire    [9:0]   datatable_addr;
-  wire            datatable_wren;
-  wire    [31:0]  datatable_data;
+  localparam [7:0] EEPROM_SLOT_ID = 8'd10;
+  localparam [31:0] EEPROM_BYTES = 32'd1024;
+  localparam [9:0] EEPROM_DATATABLE_ADDR = 10'd3;
+
   wire    [31:0]  datatable_q;
+
+  reg eeprom_save_wr_74a = 1'b0;
+  reg eeprom_save_rd_74a = 1'b0;
+  wire eeprom_save_wr_avr;
+  wire eeprom_save_rd_avr;
 
   core_bridge_cmd icb (
 
@@ -425,12 +435,47 @@ module core_top (
 
                     .osnotify_inmenu        ( osnotify_inmenu ),
 
-                    .datatable_addr         ( datatable_addr ),
-                    .datatable_wren         ( datatable_wren ),
-                    .datatable_data         ( datatable_data ),
-                    .datatable_q            ( datatable_q ),
+                    .datatable_addr         ( EEPROM_DATATABLE_ADDR ),
+                    .datatable_wren         ( 1'b1 ),
+                    .datatable_data         ( EEPROM_BYTES ),
+                    .datatable_q            ( datatable_q )
 
                   );
+
+  // Pocket can hold the core in reset while streaming the EEPROM dataslot.
+  always @(posedge clk_74a)
+  begin
+    if (~pll_core_locked)
+    begin
+      eeprom_save_wr_74a <= 1'b0;
+      eeprom_save_rd_74a <= 1'b0;
+    end
+    else if (dataslot_allcomplete)
+    begin
+      eeprom_save_wr_74a <= 1'b0;
+      eeprom_save_rd_74a <= 1'b0;
+    end
+    else if (dataslot_requestwrite && (dataslot_requestwrite_id[7:0] == EEPROM_SLOT_ID))
+    begin
+      eeprom_save_wr_74a <= 1'b1;
+    end
+    else if (dataslot_requestread && (dataslot_requestread_id[7:0] == EEPROM_SLOT_ID))
+    begin
+      eeprom_save_rd_74a <= 1'b1;
+    end
+  end
+
+  synch_3 eeprom_save_wr_sync(
+    eeprom_save_wr_74a,
+    eeprom_save_wr_avr,
+    clk_avr_16
+  );
+
+  synch_3 eeprom_save_rd_sync(
+    eeprom_save_rd_74a,
+    eeprom_save_rd_avr,
+    clk_avr_16
+  );
 
   // System ROM
   // As much as I would like to, I can't get a Megafunction RAM to work in the place of this inferred memory
@@ -461,7 +506,7 @@ module core_top (
 
                .write_en(write_en),
                .write_addr(write_addr),
-               .write_data(write_data),
+               .write_data(write_data)
              );
 
   always @(posedge clk_74a)
@@ -476,6 +521,14 @@ module core_top (
 
   wire Buzzer1, Buzzer2;
   wire oled_dc, oled_clk, oled_data;
+  wire [31:0] eeprom_bridge_rd_data;
+  wire eeprom_rd;
+  wire eeprom_wr;
+  wire [9:0] eeprom_addr_in;
+  wire [9:0] eeprom_addr_out;
+  wire [9:0] eeprom_rw_addr = eeprom_wr ? eeprom_addr_in : eeprom_addr_out;
+  wire [7:0] eeprom_data_in;
+  wire [7:0] eeprom_data_out;
 
   wire [5:0] buttons;
 
@@ -495,6 +548,41 @@ module core_top (
   wire oled_reset;
   wire ss, scl, mosi, dc;
 
+  data_unloader #(
+                  .ADDRESS_MASK_UPPER_4(4'h2),
+                  .ADDRESS_SIZE(10),
+                  .READ_MEM_CLOCK_DELAY(2)
+                ) save_data_unloader (
+                  .clk_74a(clk_74a),
+                  .clk_memory(clk_avr_16),
+
+                  .bridge_rd(bridge_rd),
+                  .bridge_endian_little(bridge_endian_little),
+                  .bridge_addr(bridge_addr),
+                  .bridge_rd_data(eeprom_bridge_rd_data),
+
+                  .read_en(eeprom_rd),
+                  .read_addr(eeprom_addr_out),
+                  .read_data(eeprom_data_out)
+                );
+
+  data_loader #(
+                .ADDRESS_MASK_UPPER_4(4'h2),
+                .ADDRESS_SIZE(10)
+              ) save_data_loader (
+                .clk_74a(clk_74a),
+                .clk_memory(clk_avr_16),
+
+                .bridge_wr(bridge_wr),
+                .bridge_endian_little(bridge_endian_little),
+                .bridge_addr(bridge_addr),
+                .bridge_wr_data(bridge_wr_data),
+
+                .write_en(eeprom_wr),
+                .write_addr(eeprom_addr_in),
+                .write_data(eeprom_data_in)
+              );
+
   atmega32u4_arduboy #(
                        .PLATFORM("XILINX"),
                        .RAM_TYPE("BLOCK"), // I don't think this does anything
@@ -502,7 +590,7 @@ module core_top (
                        .BUS_ADDR_DATA_LEN(12),
                        .RAM_ADDR_WIDTH(12),
                        .USE_UART_1("FALSE"),
-                       .USE_EEPROM("FALSE"),
+                       .USE_EEPROM("TRUE"),
                        .USE_TWI_1("FALSE")
                      ) atmega32u4
                      (
@@ -513,6 +601,14 @@ module core_top (
 
                        .pgm_addr(pgm_addr),
                        .pgm_data(pgm_data),
+
+                       .ext_eep_addr_i({7'd0, eeprom_rw_addr}),
+                       .ext_eep_data_i(eeprom_data_in),
+                       .ext_eep_data_wr_i(eeprom_wr & eeprom_save_wr_avr),
+                       .ext_eep_data_o(eeprom_data_out),
+                       .ext_eep_data_rd_i(eeprom_rd & eeprom_save_rd_avr),
+                       .ext_eep_data_en_i((eeprom_wr & eeprom_save_wr_avr) | (eeprom_rd & eeprom_save_rd_avr)),
+
                        .buttons(buttons),
                        //  .joystick_analog(8'd0),
                        // Select ADC option (CONF_STR "OFG")? What is ADC?
@@ -526,7 +622,7 @@ module core_top (
                        .OledCS(ss),
                        .OledRST(oled_reset),
                        .spi_scl(scl),
-                       .spi_mosi(mosi),
+                       .spi_mosi(mosi)
                      );
 
   //
@@ -601,7 +697,7 @@ module core_top (
   always @(posedge clk_74a)
   begin
     audgen_accum <= audgen_accum + CYCLE_48KHZ;
-    if(audgen_accum >= 21'd742500)
+    if(audgen_accum >= 22'd742500)
     begin
       audgen_mclk <= ~audgen_mclk;
       audgen_accum <= audgen_accum - 21'd742500 + CYCLE_48KHZ;

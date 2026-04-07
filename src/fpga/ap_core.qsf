@@ -750,6 +750,8 @@ set_global_assignment -name VERILOG_FILE core/rtl/avr/atmega32u4_arduboy.v
 set_global_assignment -name SYSTEMVERILOG_FILE core/rtl/video.sv
 set_global_assignment -name VERILOG_FILE core/rtl/rom_loader.v
 set_global_assignment -name VERILOG_FILE core/rtl/data_loader_8.v
+set_global_assignment -name SYSTEMVERILOG_FILE core/rtl/data_loader.sv
+set_global_assignment -name SYSTEMVERILOG_FILE core/rtl/data_unloader.sv
 set_global_assignment -name SYSTEMVERILOG_FILE core/core_top.sv
 set_global_assignment -name VERILOG_FILE "core/rtl/avr/mega-reg.v"
 set_global_assignment -name VERILOG_FILE "core/rtl/avr/mega-ram.v"
