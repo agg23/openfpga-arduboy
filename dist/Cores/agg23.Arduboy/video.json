@@ -5,10 +5,15 @@
       {
         "width": 800,
         "height": 720,
-        "aspect_w": 800,
-        "aspect_h": 720,
+        "aspect_w": 10,
+        "aspect_h": 9,
         "rotation": 0,
         "mirror": 0
+      }
+    ],
+    "display_modes": [
+      {
+        "id": "0x10"
       }
     ]
   }

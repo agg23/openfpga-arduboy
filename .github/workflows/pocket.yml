@@ -1,0 +1,128 @@
+name: Build Arduboy Core
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+permissions:
+  contents: write
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - 'src/fpga/**'
+      - 'dist/**'
+      - '.github/workflows/pocket.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: arduboy-pocket-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+    timeout-minutes: 60
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Ensure disk space
+        run: |
+          set -euo pipefail
+          free_gb=$(df --output=avail -BG / | tail -1 | tr -dc '0-9')
+          echo "Free space before cleanup: ${free_gb}G"
+
+          if [ "${free_gb}" -lt 18 ]; then
+            echo "Low disk space detected. Removing large preinstalled toolchains."
+            sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+              /usr/local/share/boost /opt/hostedtoolcache
+            sudo apt-get clean
+          else
+            echo "Skipping cleanup; runner already has sufficient free space."
+          fi
+
+          df -h /
+
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Build Pocket core
+        run: |
+          docker run --rm \
+            -v "${{ github.workspace }}:/build" \
+            -w /build/src/fpga \
+            raetro/quartus:pocket \
+            quartus_sh --flow compile ap_core
+
+      - name: Reverse Pocket bitstream
+        run: |
+          sudo chown -R runner:runner src/fpga/output_files/
+          python3 src/fpga/reverse_bitstream.py \
+            src/fpga/output_files/ap_core.rbf \
+            src/fpga/output_files/arduboy.rev
+
+      - name: Package release tree
+        run: |
+          mkdir -p release
+          cp -R dist/. release/
+          cp src/fpga/output_files/arduboy.rev release/Cores/agg23.Arduboy/arduboy.rev
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: agg23.Arduboy-pocket
+          path: release/
+          retention-days: 30
+
+  release:
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+    needs: build
+    timeout-minutes: 60
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Download build artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: agg23.Arduboy-pocket
+          path: release/
+
+      - name: Archive release payload
+        run: |
+          cd release
+          zip -r ../agg23.Arduboy-pocket.zip .
+
+      - name: Publish nightly release
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN != '' && secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
+        run: |
+          TAG=nightly
+          TITLE="Nightly build"
+          NOTES="Automated build from ${GITHUB_SHA}."
+
+          if [ -z "${GH_TOKEN}" ]; then
+            echo "No release token is available."
+            exit 1
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+
+          git tag -f "$TAG" "$GITHUB_SHA"
+          git push origin "refs/tags/$TAG" --force
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release edit "$TAG" --title "$TITLE" --notes "$NOTES" --prerelease
+            gh release upload "$TAG" agg23.Arduboy-pocket.zip --clobber
+          else
+            gh release create "$TAG" agg23.Arduboy-pocket.zip \
+              --title "$TITLE" \
+              --notes "$NOTES" \
+              --prerelease
+          fi

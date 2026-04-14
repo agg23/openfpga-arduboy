@@ -94,6 +94,7 @@ localparam YPOS_HSB_BIT = (XY_PARENT_TO_OLED_RATIO == 1) ? 5 : ((XY_PARENT_TO_OL
 
 wire [6:0]raster_x = raster_x_i[XPOS_HSB_BIT : XPOS_LSB_BIT];
 wire [5:0]raster_y = raster_y_i[YPOS_HSB_BIT : YPOS_LSB_BIT];
+wire [2:0]raster_y_bit = raster_y[2:0];
 
 /* SSD1306 logick wires & regs */
 
@@ -149,6 +150,8 @@ reg mem_wr;
 reg [7:0]buff[1023:0];
 
 reg [7:0]data_out_tmp;
+reg image_out_tmp;
+reg [2:0]raster_y_bit_tmp;
 always @ (posedge clk_i)
 begin
 	if(mem_wr)
@@ -163,11 +166,15 @@ always @ *
 begin
 	if(FULL_COLOR_OUTPUT == "TRUE")
 	begin
-		raster_d_o =  image_out ? (on ? ((invert ^ data_out_tmp[raster_y[2:0]]) ? PIXEL_ACTIVE_COLOR : PIXEL_INACTIVE_COLOR) : INACTIVE_DISPLAY_COLOR) : edge_color_i;
+		raster_d_o = (VRAM_BUFFERED_OUTPUT == "TRUE" ? image_out_tmp : image_out) ?
+			(on ? ((invert ^ data_out_tmp[VRAM_BUFFERED_OUTPUT == "TRUE" ? raster_y_bit_tmp : raster_y_bit]) ? PIXEL_ACTIVE_COLOR : PIXEL_INACTIVE_COLOR) : INACTIVE_DISPLAY_COLOR) :
+			edge_color_i;
 	end
 	else
 	begin
-		raster_d_o =  image_out ? (on ? ((invert ^ data_out_tmp[raster_y[2:0]]) ? 1'b1 : 1'b0) : 1'b0) : edge_color_i;
+		raster_d_o = (VRAM_BUFFERED_OUTPUT == "TRUE" ? image_out_tmp : image_out) ?
+			(on ? ((invert ^ data_out_tmp[VRAM_BUFFERED_OUTPUT == "TRUE" ? raster_y_bit_tmp : raster_y_bit]) ? 1'b1 : 1'b0) : 1'b0) :
+			edge_color_i;
 	end
 end
 
@@ -185,6 +192,8 @@ begin
 	if(VRAM_BUFFERED_OUTPUT == "TRUE")
 	begin
 		data_out_tmp <= buff[{raster_y[5:3], raster_x}];
+		image_out_tmp <= image_out;
+		raster_y_bit_tmp <= raster_y_bit;
 	end
 end
 
