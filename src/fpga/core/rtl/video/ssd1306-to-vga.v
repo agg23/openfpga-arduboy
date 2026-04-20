@@ -1,25 +1,24 @@
 /*
  * This IP is the SSD1306 OLED display implementation.
- * 
+ *
  * Copyright (C) 2020  Iulian Gheorghiu (morgoth@devboard.tech)
- * 
+ *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
  * of the License, or (at your option) any later version.
- * 
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
- 
-`timescale 1ns / 1ps
 
+`timescale 1ns / 1ps
 
 module ssd1306 # (
 	parameter X_OLED_SIZE = 128,
@@ -34,13 +33,13 @@ module ssd1306 # (
 	)(
 	input rst_i,
 	input clk_i,
-	
+
 	input [(FULL_COLOR_OUTPUT == "TRUE" ? 31 : 0):0]edge_color_i,
 	input [/*clogb2(X_PARENT_SIZE > Y_PARENT_SIZE ? X_PARENT_SIZE : Y_PARENT_SIZE) - 1*/12:0]raster_x_i,
 	input [/*clogb2(X_PARENT_SIZE > Y_PARENT_SIZE ? X_PARENT_SIZE : Y_PARENT_SIZE) - 1*/12:0]raster_y_i,
 	input raster_clk_i,
 	output reg[(FULL_COLOR_OUTPUT == "TRUE" ? 31 : 0):0]raster_d_o,
-	
+
 	input ss_i,
 	input scl_i,
 	input mosi_i,
@@ -54,7 +53,6 @@ reg rdy_ack;
 wire [7:0]bus_out;
 wire first_byte;
 /* !SPI wires */
-reg [3:0]dc_del;
 
 /* SPI module instance */
 spi_slave # (
@@ -62,7 +60,7 @@ spi_slave # (
 	.USE_TX("FALSE"),
 	.USE_RX("TRUE")
 	)spi_slave_inst(
-	.rst_i(rst_i/* | dc ^ dc_del*/),
+	.rst_i(rst_i),
 	.clk_i(clk_i),
 	.en_i(1'b1),
 	.bit_per_word_i(4'd8),
@@ -133,29 +131,16 @@ wire [5:0]raster_y = raster_y_i[YPOS_HSB_BIT : YPOS_LSB_BIT];
 `define SSD1306_ACTIVATE_SCROLL                      8'h2F ///< Start scroll
 `define SSD1306_SET_VERTICAL_SCROLL_AREA             8'hA3 ///< Set scroll range
 
-reg [1:0]byte_cnt;
 reg spi_rdy_n;
-reg [6:0]x_cnt;
-reg [2:0]y_cnt;
 reg [9:0]write_addr;
-reg [7:0]write_data;
-reg [7:0]curr_cmd;
-reg [1:0]curr_cmd_len;
 reg on;
 reg invert;
-reg mem_wr;
+reg [2:0]page_cnt;
+reg latched_dc_command;
+reg [7:0]data_out_tmp;
 
 (* ram_style="block" *)
 reg [7:0]buff[1023:0];
-
-reg [7:0]data_out_tmp;
-always @ (posedge clk_i)
-begin
-	if(mem_wr)
-	begin
-		buff[write_addr] <= write_data;
-	end
-end
 
 wire image_out = (raster_x_i[12 : XPOS_LSB_BIT] < X_OLED_SIZE && raster_y_i[12 : YPOS_LSB_BIT] < Y_OLED_SIZE);
 
@@ -188,96 +173,54 @@ begin
 	end
 end
 
-reg latched_dc_command = 0;
-
 // Cmd receive
 always @ (posedge rst_i or posedge clk_i)
 begin
 	if(rst_i)
 	begin
-		byte_cnt = 2'h0;
 		rdy_ack <= 1'b0;
 		spi_rdy_n <= 1'b0;
-		x_cnt <= 7'h0;
-		y_cnt <= 6'h0;
-		curr_cmd = 8'h00;
-		curr_cmd_len = 2'h0;
-		on <= 1'b0;
-		mem_wr <= 1'b0;
-		write_addr <= 10'h000;
-		write_data <= 8'h00;
-		dc_del <= 1'b1;
+		on <= 1'b1;
+		write_addr <= 10'd0;
 		invert <= 1'b0;
+		page_cnt <= 3'b000;
+		latched_dc_command <= 1'b0;
 	end
 	else
 	begin
-		mem_wr <= 1'b0;
 		if(~rdy)
 		begin
 			rdy_ack <= 1'b0;
-
-			if (~dc_i && scl_i) begin
+			if (~dc_i && scl_i)
+			begin
 				// Data was sent while in command mode
 				// Latch command prompt
-				latched_dc_command <= 1;
+				latched_dc_command <= 1'b1;
 			end
 		end
-		dc_del <= {dc_del, dc_i};
 		spi_rdy_n <= rdy;
-
 		if({spi_rdy_n, rdy} == 2'b01)
 		begin
 			rdy_ack <= 1'b1;
 			// If is data, and no command in progress
 			if(dc_i && ~latched_dc_command)
 			begin // Data
-				mem_wr <= 1'b1;
-				write_addr <= {y_cnt, x_cnt};
-				write_data <= bus_out;
-				{y_cnt, x_cnt} <= {y_cnt, x_cnt} + 10'd1;
-				byte_cnt = 2'd0;
-				curr_cmd_len = 2'd0;
-				curr_cmd = 8'h00;
-
-				latched_dc_command <= 0;
+				buff[write_addr] <= bus_out;
+				write_addr <= write_addr + 1'b1;
+				latched_dc_command <= 1'b0;
 			end
 			else
 			begin // Command
-				byte_cnt = byte_cnt + 7'h1;
-				if(curr_cmd_len == 2'd0)
-				begin
-					curr_cmd = bus_out;
-					case(bus_out)
-						`SSD1306_COLUMNADDR,
-						`SSD1306_PAGEADDR: curr_cmd_len = 2'd3;
-						`SSD1306_MEMORYMODE,
-						`SSD1306_SETCONTRAST,
-						`SSD1306_CHARGEPUMP,
-						`SSD1306_SETMULTIPLEX,
-						`SSD1306_SETDISPLAYOFFSET,
-						`SSD1306_SETDISPLAYCLOCKDIV,
-						`SSD1306_SETPRECHARGE,
-						`SSD1306_SETCOMPINS,
-						`SSD1306_SETVCOMDETECT: curr_cmd_len = 2'd2;
-						default: curr_cmd_len = 2'd1;
-					endcase
+				if(bus_out[7:1] == 'b1010011) invert <= bus_out[0]; // invert (A6/A7)
+				if(bus_out[7:1] == 'b1010111) on <= bus_out[0]; // off/on (AE/AF)
+				if(bus_out[7:3] == 'b10110) write_addr <= {bus_out[2:0], 7'b0000000}; // page 0-7 (B0-B7)
+				if(bus_out == 8'h22)
+				begin // for games using https://github.com/akkera102/08_gamebuino
+					write_addr <= {page_cnt, 7'b0000000};
+					if (page_cnt == 3'b101) page_cnt <= 3'b000;
+					else page_cnt <= page_cnt + 1'b1;
 				end
-				if(curr_cmd_len == byte_cnt)
-				begin
-					case(curr_cmd)
-						`SSD1306_COLUMNADDR: x_cnt <= bus_out;
-						`SSD1306_PAGEADDR: y_cnt <= bus_out;
-						`SSD1306_DISPLAYOFF: on <= 1'b0;
-						`SSD1306_DISPLAYON: on <= 1'b1;
-						`SSD1306_INVERTDISPLAY: invert <= 1'b1;
-						`SSD1306_NORMALDISPLAY: invert <= 1'b0;
-					endcase
-					byte_cnt = 2'd0;
-					curr_cmd_len = 2'd0;
-					curr_cmd = 8'h00;
-
-					latched_dc_command <= 0;
-				end
+				latched_dc_command <= 1'b0;
 			end
 		end
 	end
